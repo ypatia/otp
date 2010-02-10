@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 1996-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 %% Purpose : Expand some source Erlang constructions. This is part of the
@@ -114,7 +114,7 @@ expand_pmod(Fs0, St0) ->
 	    St1 = St0#expand{exports=Xs, defined=Ds},
 	    {Fs2,St2} = add_instance(Ps, Fs1, St1),
 	    {Fs3,St3} = ensure_new(Base, Ps0, Fs2, St2),
-            {Fs3,St3#expand{attributes = [{abstract, [true]}
+            {Fs3,St3#expand{attributes = [{abstract, 0, [true]}
 					  | St3#expand.attributes]}}
     end.
 
