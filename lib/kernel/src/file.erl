@@ -73,6 +73,7 @@
 
 %% data types
 -type filename()  :: string().
+-type file_info() :: #file_info{}.
 -type io_device() :: pid() | #file_descriptor{}.
 -type location()  :: integer() | {'bof', integer()} | {'cur', integer()}
 		   | {'eof', integer()} | 'bof' | 'cur' | 'eof'.
