@@ -1,20 +1,20 @@
 %% -*- erlang-indent-level: 2 -*-
 %%-----------------------------------------------------------------------
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2008-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2008-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
@@ -102,7 +102,7 @@
                      args       :: args(),
                      arg_types  :: [erl_types:erl_type()],
                      vars       :: [core_vars()],
-                     state      :: _, %% XXX: recursive 
+                     state      :: _, %% XXX: recursive
                      file_line  :: file_line(),
                      var_map    :: dict()}).
 -record(fun_call,   {caller     :: mfa_or_funlbl(),
@@ -505,7 +505,7 @@ fixup_race_forward(CurrFun, CurrFunLabel, Calls, Code, RaceList,
               _Other ->
                 {RaceList, [], NestingLevel, false}
             end;
-  	  #warn_call{call_name = RegCall} when RegCall =:= register orelse 
+	  #warn_call{call_name = RegCall} when RegCall =:= register orelse
                                                RegCall =:= unregister ->
             case RaceWarnTag of
               WarnWhereis when WarnWhereis =:= ?WARN_WHEREIS_REGISTER orelse
@@ -1704,7 +1704,7 @@ compare_types(VarArgs, WarnVarArgs, RaceWarnTag, RaceVarMap) ->
             false ->
               compare_var_list(VA1, WVA1, RaceVarMap) orelse
                 compare_argtypes(VA2, WVA2)
-                
+
           end
       end;
     ?WARN_ETS_LOOKUP_INSERT ->

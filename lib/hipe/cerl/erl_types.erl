@@ -1,20 +1,20 @@
 %% -*- erlang-indent-level: 2 -*-
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2003-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2003-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 %% ======================================================================
@@ -596,20 +596,20 @@ t_opaque_tuple_tags(OpaqueStruct) ->
   end.
 
 %% Decompose opaque instances of type arg2 to structured types, in arg1
-%% XXX: Same as t_unopaque 
+%% XXX: Same as t_unopaque
 -spec t_struct_from_opaque(erl_type(), [erl_type()]) -> erl_type().
 
 t_struct_from_opaque(?function(Domain, Range), Opaques) ->
-  ?function(t_struct_from_opaque(Domain, Opaques),  
+  ?function(t_struct_from_opaque(Domain, Opaques),
 	    t_struct_from_opaque(Range, Opaques));
-t_struct_from_opaque(?list(Types, Term, Size), Opaques) -> 
+t_struct_from_opaque(?list(Types, Term, Size), Opaques) ->
   ?list(t_struct_from_opaque(Types, Opaques), Term, Size);
-t_struct_from_opaque(?opaque(_) = T, Opaques) -> 
+t_struct_from_opaque(?opaque(_) = T, Opaques) ->
   case lists:member(T, Opaques) of
     true  -> t_opaque_structure(T);
     false -> T
   end;
-t_struct_from_opaque(?product(Types), Opaques) -> 
+t_struct_from_opaque(?product(Types), Opaques) ->
   ?product(list_struct_from_opaque(Types, Opaques));
 t_struct_from_opaque(?tuple(?any, _, _) = T, _Opaques) -> T;
 t_struct_from_opaque(?tuple(Types, Arity, Tag), Opaques) ->
@@ -632,7 +632,7 @@ t_unopaque_on_mismatch(GenType, Type, Opaques) ->
     ?none ->
       Unopaqued = t_unopaque(Type, Opaques),
       %% Unions might be a problem, must investigate.
-      case t_inf(GenType, Unopaqued) of 
+      case t_inf(GenType, Unopaqued) of
 	?none -> Type;
 	_ -> Unopaqued
       end;
@@ -666,11 +666,11 @@ t_solve_remote(Type , Records) ->
 
 t_solve_remote(?function(Domain, Range), R, C) ->
   {RT1, RR1} = t_solve_remote(Domain, R, C),
-  {RT2, RR2} = t_solve_remote(Range, R, C), 
+  {RT2, RR2} = t_solve_remote(Range, R, C),
   {?function(RT1, RT2), RR1 ++ RR2};
 t_solve_remote(?list(Types, Term, Size), R, C) ->
   {RT, RR} = t_solve_remote(Types, R, C),
-  {?list(RT, Term, Size), RR}; 
+  {?list(RT, Term, Size), RR};
 t_solve_remote(?product(Types), R, C) ->
   {RL, RR} = list_solve_remote(Types, R, C),
   {?product(RL), RR};
@@ -699,7 +699,7 @@ t_solve_remote_type(#remote{mod = RemMod, name = Name, args = Args} = RemType,
   case dict:find(RemMod, R) of
     error ->
       Msg = io_lib:format("Cannot locate module ~w to "
-                          "resolve the remote type: ~w:~w()~n", 
+                          "resolve the remote type: ~w:~w()~n",
                           [RemMod, RemMod, Name]),
       throw({error, Msg});
     {ok, RemDict} ->
@@ -748,7 +748,7 @@ t_solve_remote_type(#remote{mod = RemMod, name = Name, args = Args} = RemType,
         error ->
           Msg = io_lib:format("Unable to find remote type ~w:~w()\n",
                               [RemMod, Name]),
-          throw({error, Msg}) 
+          throw({error, Msg})
       end
   end.
 
@@ -2293,12 +2293,12 @@ t_inf(T, ?union(U2), Mode) ->
 %% and as a result, the cases for ?opaque should appear *after* ?union
 t_inf(?opaque(Set1) = T1, ?opaque(Set2) = T2, Mode) ->
   case set_intersection(Set1, Set2) of
-    ?none -> 
-      case Mode =:= opaque of 
+    ?none ->
+      case Mode =:= opaque of
 	true ->
 	  Struct1 = t_opaque_structure(T1),
 	  case t_inf(Struct1, T2) of
-	    ?none -> 
+	    ?none ->
 	      Struct2 = t_opaque_structure(T2),
 	      case t_inf(Struct2, T1) of
 		?none -> ?none;
@@ -2568,7 +2568,7 @@ t_unify(?list(Contents1, Termination1, Size),
   {Contents, Dict1} = t_unify(Contents1, Contents2, Dict, Opaques),
   {Termination, Dict2} = t_unify(Termination1, Termination2, Dict1, Opaques),
   {?list(Contents, Termination, Size), Dict2};
-t_unify(?product(Types1), ?product(Types2), Dict, Opaques) -> 
+t_unify(?product(Types1), ?product(Types2), Dict, Opaques) ->
   {Types, Dict1} = unify_lists(Types1, Types2, Dict, Opaques),
   {?product(Types), Dict1};
 t_unify(?tuple(?any, ?any, ?any) = T, ?tuple(?any, ?any, ?any), Dict, _Opaques) ->
@@ -3397,7 +3397,7 @@ t_from_form({type, _L, atom, []}, _TypeNames, _RecDict, _VarDict) ->
 t_from_form({type, _L, binary, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_binary(), []};
 t_from_form({type, _L, binary, [{integer, _, Base}, {integer, _, Unit}]}, 
-	    _TypeNames, _RecDict, _VarDict) -> 
+	    _TypeNames, _RecDict, _VarDict) ->
   {t_bitstr(Unit, Base), []};
 t_from_form({type, _L, bitstring, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_bitstr(), []};
@@ -3453,7 +3453,7 @@ t_from_form({type, _L, nil, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_nil(), []};
 t_from_form({type, _L, neg_integer, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_neg_integer(), []};
-t_from_form({type, _L, non_neg_integer, []}, _TypeNames, _RecDict, _VarDict) -> 
+t_from_form({type, _L, non_neg_integer, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_non_neg_integer(), []};
 t_from_form({type, _L, no_return, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_unit(), []};
@@ -3461,13 +3461,13 @@ t_from_form({type, _L, node, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_node(), []};
 t_from_form({type, _L, none, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_none(), []};
-t_from_form({type, _L, nonempty_list, []}, _TypeNames, _RecDict, _VarDict) -> 
+t_from_form({type, _L, nonempty_list, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_nonempty_list(), []};
 t_from_form({type, _L, nonempty_list, [Type]}, TypeNames, RecDict, VarDict) ->
   {T, R} = t_from_form(Type, TypeNames, RecDict, VarDict),
   {t_nonempty_list(T), R};
 t_from_form({type, _L, nonempty_improper_list, [Cont, Term]}, TypeNames,
-            RecDict, VarDict) -> 
+            RecDict, VarDict) ->
   {T1, R1} = t_from_form(Cont, TypeNames, RecDict, VarDict),
   {T2, R2} = t_from_form(Term, TypeNames, RecDict, VarDict),
   {t_cons(T1, T2), R1 ++ R2};
@@ -3475,11 +3475,11 @@ t_from_form({type, _L, nonempty_maybe_improper_list, []}, _TypeNames,
             _RecDict, _VarDict) ->
   {t_cons(?any, ?any), []};
 t_from_form({type, _L, nonempty_maybe_improper_list, [Cont, Term]}, TypeNames,
-            RecDict, VarDict) -> 
+            RecDict, VarDict) ->
   {T1, R1} = t_from_form(Cont, TypeNames, RecDict, VarDict),
   {T2, R2} = t_from_form(Term, TypeNames, RecDict, VarDict),
   {t_cons(T1, T2), R1 ++ R2};
-t_from_form({type, _L, nonempty_string, []}, _TypeNames, _RecDict, _VarDict) -> 
+t_from_form({type, _L, nonempty_string, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_nonempty_string(), []};
 t_from_form({type, _L, number, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_number(), []};
@@ -3490,7 +3490,7 @@ t_from_form({type, _L, port, []}, _TypeNames, _RecDict, _VarDict) ->
 t_from_form({type, _L, pos_integer, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_pos_integer(), []};
 t_from_form({type, _L, maybe_improper_list, []}, _TypeNames, _RecDict,
-            _VarDict) -> 
+            _VarDict) ->
   {t_maybe_improper_list(), []};
 t_from_form({type, _L, maybe_improper_list, [Content, Termination]}, TypeNames,
             RecDict, VarDict) ->
@@ -3503,9 +3503,9 @@ t_from_form({type, _L, product, Elements}, TypeNames, RecDict, VarDict) ->
 t_from_form({type, _L, queue, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_queue(), []};
 t_from_form({type, _L, range, [{integer, _, From}, {integer, _, To}]}, 
-	    _TypeNames, _RecDict, _VarDict) -> 
+	    _TypeNames, _RecDict, _VarDict) ->
   {t_from_range(From, To), []};
-t_from_form({type, _L, record, [Name|Fields]}, TypeNames, RecDict, VarDict) -> 
+t_from_form({type, _L, record, [Name|Fields]}, TypeNames, RecDict, VarDict) ->
   record_from_form(Name, Fields, TypeNames, RecDict, VarDict);
 t_from_form({type, _L, reference, []}, _TypeNames, _RecDict, _VarDict) ->
   {t_reference(), []};
@@ -3524,7 +3524,7 @@ t_from_form({type, _L, tuple, any}, _TypeNames, _RecDict, _VarDict) ->
 t_from_form({type, _L, tuple, Args}, TypeNames, RecDict, VarDict) ->
   {L, R} = list_from_form(Args, TypeNames, RecDict, VarDict),
   {t_tuple(L), R};
-t_from_form({type, _L, union, Args}, TypeNames, RecDict, VarDict) -> 
+t_from_form({type, _L, union, Args}, TypeNames, RecDict, VarDict) ->
   {L, R} = list_from_form(Args, TypeNames, RecDict, VarDict),
   {t_sup(L), R};
 t_from_form({type, _L, Name, Args}, TypeNames, RecDict, VarDict) ->
@@ -3555,7 +3555,7 @@ t_from_form({type, _L, Name, Args}, TypeNames, RecDict, VarDict) ->
             List = lists:zipwith(
                      fun(ArgName, ArgType) ->
                          {Ttemp, _R} =  t_from_form(ArgType, TypeNames,
-                                                    RecDict, VarDict), 
+                                                    RecDict, VarDict),
                          {ArgName, Ttemp}
                      end,
                      ArgNames, Args),
@@ -3579,7 +3579,7 @@ t_from_form({type, _L, Name, Args}, TypeNames, RecDict, VarDict) ->
       throw({error, io_lib:format("Unable to find type ~w\n", [Name])}) 
   end;
 t_from_form({opaque, _L, Name, {Mod, Args, Rep}}, _TypeNames, _RecDict,
-            _VarDict) -> 
+            _VarDict) ->
   case Args of
     [] -> {t_opaque(Mod, Name, Args, Rep), []};
     _ -> throw({error, "Polymorphic opaque types not supported yet"})
@@ -3603,7 +3603,7 @@ record_from_form({atom, _, Name}, ModFields, TypeNames, RecDict, VarDict) ->
                                            TypeNames1, RecDict, VarDict),
           case GetModRec of
             {error, FieldName} ->
-              throw({error, io_lib:format("Illegal declaration of ~w#{~w}\n", 
+              throw({error, io_lib:format("Illegal declaration of ~w#{~w}\n",
                                           [Name, FieldName])});
             {ok, NewFields} ->
               {t_tuple(

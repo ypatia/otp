@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2007-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2007-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %% 
 
@@ -85,7 +85,7 @@ stop(_State) ->
 
 %% profiling
 
--spec profile(Filename :: file:filename()) -> 
+-spec profile(Filename :: file:filename()) ->
 	{'ok', port()} | {'already_started', port()}.
 
 profile(Filename) ->
@@ -123,7 +123,7 @@ stop_profile() ->
 %% @spec analyze(string()) -> ok | {error, Reason} 
 %% @doc Analyze file.
 
--spec analyze(Filename :: file:filename()) -> 
+-spec analyze(Filename :: file:filename()) ->
 	'ok' | {'error', any()}.
 
 analyze(Filename) ->
@@ -140,7 +140,7 @@ analyze(Filename) ->
 %%	Reason = term() 
 %% @doc Starts webserver.
 
--spec start_webserver() -> 
+-spec start_webserver() ->
 	{'started', string(), pos_integer()} | {'error', any()}.
 
 start_webserver() ->

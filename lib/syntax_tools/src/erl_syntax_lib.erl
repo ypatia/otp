@@ -1435,7 +1435,7 @@ analyze_variable_list(Node) ->
 %%
 %% @see analyze_attribute/1
 
--type functionN()    :: atom() | {atom(), arity()}. 
+-type functionN()    :: atom() | {atom(), arity()}.
 -type functionName() :: functionN() | {atom(), functionN()}.
 
 -spec analyze_export_attribute(erl_syntax:syntaxTree()) -> [functionName()].

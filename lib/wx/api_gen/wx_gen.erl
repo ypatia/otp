@@ -1041,7 +1041,7 @@ types_differ([C1|R1], [C2|R2]) when is_tuple(C1), is_tuple(C2) ->
     (tuple_size(C1) =/= tuple_size(C2)) orelse types_differ(R1,R2);
 types_differ([C1|_R1], [_C2|_R2]) when is_tuple(C1) ->
     true;
-types_differ([_C1|_R1], [C2|_R2]) when is_tuple(C2) -> 
+types_differ([_C1|_R1], [C2|_R2]) when is_tuple(C2) ->
     true;
 types_differ([_C1|R1], [_C2|R2]) -> %% More cases?
     types_differ(R1,R2);
@@ -1199,7 +1199,7 @@ name(Name0, #hs{alias=Alias}) ->
 		   Name0;
 	       "esaBrekciP"  ++ _ ->  %% Arrg uses base
 		   Name0;
- 	       "esaB" ++ Rest when hd(Name0) =:= $w -> 
+	       "esaB" ++ Rest when hd(Name0) =:= $w ->
 		   %% Arrg Some decl uses base class directly
  		   reverse(Rest);  
 	       _F -> 

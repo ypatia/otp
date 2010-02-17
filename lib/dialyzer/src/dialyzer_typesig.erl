@@ -1,20 +1,20 @@
 %% -*- erlang-indent-level: 2 -*-
 %%-----------------------------------------------------------------------
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2006-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2006-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
@@ -663,13 +663,13 @@ get_plt_constr(MFA, Dst, ArgVars, State) ->
 	    {mk_fun_var(
 	       fun(Map) ->
 		   ArgTypes0 = lookup_type_list(ArgVars, Map),
- 		   ArgTypes = case FunModule =:= Module of
-  				false ->
+		   ArgTypes = case FunModule =:= Module of
+				false ->
 				  List = lists:zip(PltArgTypes, ArgTypes0),
-  				  [erl_types:t_unopaque_on_mismatch(T1, T2, Opaques) 
+				  [erl_types:t_unopaque_on_mismatch(T1, T2, Opaques)
 				   || {T1, T2} <- List];
-  				true -> ArgTypes0
-  			      end,
+				true -> ArgTypes0
+			      end,
 		   CRet = dialyzer_contracts:get_contract_return(C, ArgTypes),
 		   t_inf(CRet, PltRetType, opaque)
 	       end, ArgVars),
@@ -1535,7 +1535,7 @@ get_bif_constr({M, F, A} = _BIF, Dst, Args, State) ->
   case t_is_none(GenType) of
     true -> ?debug("Bif: ~w failed\n", [_BIF]), throw(error);
     false ->
-      UnopaqueFun = 
+      UnopaqueFun =
 	fun(T) -> case lists:member(T, Opaques)  of
 		    true -> erl_types:t_unopaque(T, [T]);
 		    false -> T

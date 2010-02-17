@@ -1,20 +1,20 @@
 %% -*- erlang-indent-level: 2 -*-
 %%-----------------------------------------------------------------------
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2006-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
@@ -51,7 +51,7 @@
 get_behaviours(Modules, Codeserver) ->
   get_behaviours(Modules, Codeserver, [], []).
 
--spec check_callbacks(module(), [{cerl:cerl(), cerl:cerl()}], 
+-spec check_callbacks(module(), [{cerl:cerl(), cerl:cerl()}],
 		      dialyzer_plt:plt(),
 		      dialyzer_codeserver:codeserver()) -> [dial_warning()].
 
@@ -59,7 +59,7 @@ check_callbacks(Module, Attrs, Plt, Codeserver) ->
   {Behaviours, BehLines} = get_behaviours(Attrs),
   case Behaviours of
     [] -> [];
-     _ -> {_Var,Code} = 
+     _ -> {_Var,Code} =
 	    dialyzer_codeserver:lookup_mfa_code({Module,module_info,0},
 						Codeserver),
 	  File = get_file(cerl:get_ann(Code)),
@@ -121,8 +121,8 @@ translate_callgraph([], _Module, Callgraph) ->
 %%--------------------------------------------------------------------
 
 get_behaviours(Attrs) ->
-  BehaviourListsAndLine = [{cerl:concrete(L2), hd(cerl:get_ann(L2))} || 
-		  {L1, L2} <- Attrs, cerl:is_literal(L1), 
+  BehaviourListsAndLine = [{cerl:concrete(L2), hd(cerl:get_ann(L2))} ||
+		  {L1, L2} <- Attrs, cerl:is_literal(L1),
 		  cerl:is_literal(L2), cerl:concrete(L1) =:= 'behaviour'],
   Behaviours = lists:append([Behs || {Behs,_} <- BehaviourListsAndLine]),
   BehLines = [{B,L} || {L1,L} <- BehaviourListsAndLine, B <- L1],
@@ -138,7 +138,7 @@ get_warnings(Module, [Behaviour|Rest], State, Acc) ->
   get_warnings(Module, Rest, State, Warnings ++ Acc).
 
 check_behaviour(Module, Behaviour, State) ->
-  try 
+  try
     Callbacks = Behaviour:behaviour_info(callbacks),
     Fun = fun({_,_,_}) -> true;
 	     (_)       -> false
@@ -162,9 +162,9 @@ check_all_callbacks(Module, Behaviour, [{Fun, Arity, Spec}|Rest], State, Acc) ->
     {ok, Fun, Type} ->
       RetType = erl_types:t_fun_range(Type),
       ArgTypes = erl_types:t_fun_args(Type),
-      Warns = check_callback(Module, Behaviour, Fun, Arity, RetType, 
+      Warns = check_callback(Module, Behaviour, Fun, Arity, RetType,
 			     ArgTypes, State#state.plt);
-    Else -> 
+    Else ->
       Warns = [{invalid_spec, [Behaviour, Fun, Arity, reason_spec_error(Else)]}]
   end,
   check_all_callbacks(Module, Behaviour, Rest, State, Warns ++ Acc);
@@ -178,7 +178,7 @@ parse_spec(String, Records) ->
       case erl_parse:parse(Tokens) of
 	{ok, Form} ->
 	  case Form of
-	    {attribute, _, 'spec', {{Fun, _}, [TypeForm|_Constraint]}} -> 
+	    {attribute, _, 'spec', {{Fun, _}, [TypeForm|_Constraint]}} ->
 	      MaybeRemoteType = erl_types:t_from_form(TypeForm),
 	      try
 		Type = erl_types:t_solve_remote(MaybeRemoteType, Records),
@@ -229,7 +229,7 @@ check_callback(Module, Behaviour, Fun, Arity, XRetType, XArgTypes, Plt) ->
   end.
 
 check_callback_1({N, T1, T2}) ->
-  {unifiable(T1, T2), N}. 
+  {unifiable(T1, T2), N}.
 
 unifiable(Type1, Type2) ->
   List1 = erl_types:t_elements(Type1),
@@ -246,7 +246,7 @@ add_tag_file_line(_Module, {Tag, [B|_R]} = Warn, State)
   {B, Line} = lists:keyfind(B, 1, State#state.behlines),
   {?WARN_BEHAVIOUR, {State#state.filename, Line}, Warn};
 add_tag_file_line(Module, {_Tag, [_B, Fun, Arity|_R]} = Warn, State) ->
-  {_A, FunCode} = 
+  {_A, FunCode} =
     dialyzer_codeserver:lookup_mfa_code({Module, Fun, Arity},
 					State#state.codeserver),
   Anns = cerl:get_ann(FunCode),
@@ -269,14 +269,14 @@ get_behaviours([M|Rest], Codeserver, KnownAcc, UnknownAcc) ->
   Attrs = cerl:module_attrs(Tree),
   {Behaviours, _BehLines} = get_behaviours(Attrs),
   {Known, Unknown} = call_behaviours(Behaviours),
-  get_behaviours(Rest, Codeserver, Known ++ KnownAcc, Unknown ++ UnknownAcc).  
+  get_behaviours(Rest, Codeserver, Known ++ KnownAcc, Unknown ++ UnknownAcc).
 
 call_behaviours(Behaviours) ->
   call_behaviours(Behaviours, [], []).
 call_behaviours([], KnownAcc, UnknownAcc) ->
   {lists:reverse(KnownAcc), lists:reverse(UnknownAcc)};
 call_behaviours([Behaviour|Rest], KnownAcc, UnknownAcc) ->
-  try 
+  try
     Callbacks = Behaviour:behaviour_info(callbacks),
     Fun = fun({_,_,_}) -> true;
 	     (_)       -> false
@@ -297,7 +297,7 @@ get_behaviour_apis([Behaviour | Rest], Acc) ->
   MFAs = [{Behaviour, Fun, Arity} ||
 	   {{Fun, Arity}, _} <- behaviour_api_calls(Behaviour)],
   get_behaviour_apis(Rest, MFAs ++ Acc).
-  
+
 %-------------------------------------------------------------------------------
 
 nth_or_0(0, _List, Zero) ->
@@ -308,9 +308,9 @@ nth_or_0(N, List, _Zero) ->
 %-------------------------------------------------------------------------------
 
 behaviour_api_calls(gen_server) ->
-  [{{start_link, 3}, {init, 1, [2]}}, 
+  [{{start_link, 3}, {init, 1, [2]}},
    {{start_link, 4}, {init, 1, [3]}},
-   {{start, 3}, {init, 1, [2]}}, 
+   {{start, 3}, {init, 1, [2]}},
    {{start, 4}, {init, 1, [3]}},
    {{call, 2}, {handle_call, 3, [2, 0, 0]}},
    {{call, 3}, {handle_call, 3, [2, 0, 0]}},

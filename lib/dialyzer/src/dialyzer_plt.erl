@@ -1,20 +1,20 @@
 %% -*- erlang-indent-level: 2 -*-
 %%----------------------------------------------------------------------
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2006-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2006-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
@@ -80,7 +80,7 @@
 -type file_md5() :: {file:filename(), binary()}.
 -type plt_info() :: {[file_md5()], dict()}.
 
--record(file_plt, {version = ""            :: string(), 
+-record(file_plt, {version = ""            :: string(),
 		   file_md5_list = []      :: [file_md5()],
 		   info = dict:new()       :: dict(),
 		   contracts = dict:new()  :: dict(),
@@ -269,14 +269,14 @@ merge_plts(List) ->
 -spec to_file(file:filename(), plt(), mod_deps(), {[file_md5()], mod_deps()}) -> 'ok'.
 
 to_file(FileName,
-	#plt{info = Info, types = Types, contracts = Contracts}, 
+	#plt{info = Info, types = Types, contracts = Contracts},
 	ModDeps, {MD5, OldModDeps}) ->
   NewModDeps = dict:merge(fun(_Key, OldVal, NewVal) -> 
 			      ordsets:union(OldVal, NewVal)
 			  end, 
 			  OldModDeps, ModDeps),
   ImplMd5 = compute_implementation_md5(),
-  Record = #file_plt{version = ?VSN, 
+  Record = #file_plt{version = ?VSN,
 		     file_md5_list = MD5,
 		     info = Info,
 		     contracts = Contracts,

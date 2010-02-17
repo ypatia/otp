@@ -1,20 +1,20 @@
 %% -*- erlang-indent-level: 2 -*-
 %%--------------------------------------------------------------------
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2006-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2006-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
@@ -626,17 +626,17 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
 	  none -> {AnyArgs, t_any()}
 	end
     end,
-  ArgModeMask = [case lists:member(Arg, Opaques) of 
+  ArgModeMask = [case lists:member(Arg, Opaques) of
 	       true -> opaque;
 	       false -> structured
 	     end || Arg <- ArgTypes],
   NewArgsSig = t_inf_lists_masked(SigArgs, ArgTypes, ArgModeMask),
   NewArgsContract = t_inf_lists_masked(CArgs, ArgTypes, ArgModeMask),
   NewArgsBif = t_inf_lists_masked(BifArgs, ArgTypes, ArgModeMask),
-  NewArgTypes0 = t_inf_lists_masked(NewArgsSig, NewArgsContract, ArgModeMask), 
+  NewArgTypes0 = t_inf_lists_masked(NewArgsSig, NewArgsContract, ArgModeMask),
   NewArgTypes = t_inf_lists_masked(NewArgTypes0, NewArgsBif, ArgModeMask),
   BifRet = BifRange(NewArgTypes),
-  {TmpArgTypes, TmpArgsContract} = 
+  {TmpArgTypes, TmpArgsContract} =
     case (TypeOfApply == remote) andalso (not IsBIF) of
       true ->
 	List1 = lists:zip(CArgs, NewArgTypes),
@@ -652,7 +652,7 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
 	   true  -> opaque;
 	   false -> structured
 	 end,
-  RetWithoutLocal = t_inf(t_inf(ContrRet, BifRet, RetMode), SigRange, RetMode),  
+  RetWithoutLocal = t_inf(t_inf(ContrRet, BifRet, RetMode), SigRange, RetMode),
   ?debug("--------------------------------------------------------\n", []),
   ?debug("Fun: ~p\n", [Fun]),
   ?debug("Args: ~s\n", [erl_types:t_to_string(t_product(ArgTypes))]),
@@ -679,7 +679,7 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
 	Module = State#state.module,
 	BehApiInfo = State#state.behaviour_api_info,
 	{RealFun, RealArgTypes, RealArgs} =
-	  case dialyzer_behaviours:translate_behaviour_api_call(Fun, ArgTypes, 
+	  case dialyzer_behaviours:translate_behaviour_api_call(Fun, ArgTypes,
 								Args, Module,
 								BehApiInfo) of
 	    plain_call    -> {Fun, ArgTypes, Args};
@@ -1727,7 +1727,7 @@ bind_error(Pats, Type, OpaqueType, Error) ->
 
 bind_opaque_pats(GenType, Type, Pat, Map, State, Rev) ->
   case t_find_opaque_mismatch(GenType, Type) of
-    {ok, T1, T2}  -> 
+    {ok, T1, T2}  ->
       case lists:member(T2, State#state.opaques) of
 	true ->
 	  NewType = erl_types:t_struct_from_opaque(Type, [T2]),
@@ -1738,7 +1738,7 @@ bind_opaque_pats(GenType, Type, Pat, Map, State, Rev) ->
       end;
     error -> bind_error([Pat], Type, t_none(), bind)
   end.
-    
+
 %%----------------------------------------
 %% Guards
 %%

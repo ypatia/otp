@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 1997-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 1997-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 %%
@@ -1357,7 +1357,8 @@ pgen_hrltypes(Erules,Module,[H|T],NumRecords) ->
 
 %% Generates a macro for value Value defined in the ASN.1 module
 gen_macro(Value) when is_record(Value,valuedef) ->
-    emit({"-define('",Value#valuedef.name,"', ",
+    Prefix = get_macro_name_prefix(),
+    emit({"-define('",Prefix,Value#valuedef.name,"', ",
 	  {asis,Value#valuedef.value},").",nl}).
 
 %% Generate record functions **************
@@ -2059,6 +2060,14 @@ ensure_atom(List) when is_list(List) ->
     
 get_record_name_prefix() ->
     case lists:keysearch(record_name_prefix,1,get(encoding_options)) of
+	false ->
+	    "";
+	{value,{_,Prefix}} ->
+	    Prefix
+    end.
+
+get_macro_name_prefix() ->
+    case lists:keysearch(macro_name_prefix,1,get(encoding_options)) of
 	false ->
 	    "";
 	{value,{_,Prefix}} ->

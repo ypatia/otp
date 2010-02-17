@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 1996-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
@@ -36,10 +36,10 @@ parse_and_scan({M, F, A}) ->
 -spec format_error(any()) -> [char() | list()].
 format_error(Message) ->
     case io_lib:deep_char_list(Message) of
-	true ->
-	    Message;
-	_ ->
-	    io_lib:write(Message)
+        true ->
+            Message;
+        _ ->
+            io_lib:write(Message)
     end.
 
 %% To be used in grammar files to throw an error message to the parser
@@ -84,7 +84,7 @@ yeccpars1([Token | Tokens], Tzr, State, States, Vstack) ->
 yeccpars1([], {{F, A},_Line}, State, States, Vstack) ->
     case apply(F, A) of
         {ok, Tokens, Endline} ->
-	    yeccpars1(Tokens, {{F, A}, Endline}, State, States, Vstack);
+            yeccpars1(Tokens, {{F, A}, Endline}, State, States, Vstack);
         {eof, Endline} ->
             yeccpars1([], {no_func, Endline}, State, States, Vstack);
         {error, Descriptor, _Endline} ->

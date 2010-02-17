@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 1996-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 %% Yacc like LALR-1 parser generator for Erlang.
@@ -31,7 +31,7 @@
 -import(lists, [append/1, append/2, concat/1, delete/2, filter/2,
                 flatmap/2, foldl/3, foldr/3, foreach/2, keydelete/3,
                 keysort/2, last/1, map/2, member/2, reverse/1,
-		sort/1, usort/1]).
+                sort/1, usort/1]).
 
 -include("erl_compile.hrl").
 -include("ms_transform.hrl").
@@ -298,8 +298,8 @@ options(Options0, [Key | Keys], L) when is_list(Options0) ->
                       Options0
               end,
     V = case lists:keyfind(Key, 1, Options) of
-            {Key, Filename0} when Key =:= includefile; 
-				  Key =:= parserfile ->
+            {Key, Filename0} when Key =:= includefile;
+                                  Key =:= parserfile ->
                 case is_filename(Filename0) of
                     no -> 
                         badarg;

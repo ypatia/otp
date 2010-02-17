@@ -657,7 +657,7 @@ flatrev([], As, []) ->
 
 %% nicest(best(w, r, nest(i, *)), best(w, r, d))
 -record(c_best_nest_or, {w :: integer(), r :: integer(),
-			 i :: integer(), d :: document()}). 
+			 i :: integer(), d :: document()}).
 
 -record(c_fit, {c :: ctxt()}).			%% fit(*)
 
