@@ -506,8 +506,8 @@ get_edoc(Mod) ->
   ok.
 
 edoc(Name, Opts) ->
-  Doc = edoc:get_doc([Name, Opts]),
+  Doc = edoc:get_doc(Name, Opts),
   %% Comments = edoc:read_comments(Name, Opts),
   %% Text = edoc:forms(Forms, Comments, Name, Opts),
-  edoc:layout([Doc, Opts]),
+  edoc:layout(Doc, Opts),
   ok.
