@@ -77,12 +77,8 @@ start() ->
 
 -spec start_link() -> {'ok', pid()} | 'ignore' | {'error', term()}.
 
--spec start_link() -> {'ok', pid()} | 'ignore' | {'error', term()}.
-
 start_link() ->
     gen_server:start_link({local,?NAME}, ?MODULE, [], []).
-
--spec stop() -> term().
 
 -spec stop() -> term().
 
@@ -180,8 +176,6 @@ handle_info({From, {call,Mod,Fun,Args,Gleader}}, S) ->
     handle_call_call(Mod, Fun, Args, Gleader, {From,?NAME}, S);
 handle_info(_, S) ->
     {noreply, S}.
-
--spec terminate(term(), state()) -> 'ok'.
 
 -spec terminate(term(), state()) -> 'ok'.
 

@@ -192,9 +192,6 @@ init(Slaves) ->
 -spec handle_call('which' | {'add',atom()} | {'delete',atom()}, _, state()) ->
         {'reply', 'ok' | [atom()], state()}.
 
--spec handle_call('which' | {'add',atom()} | {'delete',atom()}, _, state()) ->
-        {'reply', 'ok' | [atom()], state()}.
-
 handle_call({add,Address}, _, S0) ->
     Slaves = ordsets:add_element(Address, S0#state.slaves),
     S0#state.bootp ! {slaves, Slaves},
