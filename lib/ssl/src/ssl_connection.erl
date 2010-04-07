@@ -441,7 +441,8 @@ certify(#certificate{} = Cert,
 			       Opts#ssl_options.verify,
 			       Opts#ssl_options.verify_fun) of
         {PeerCert, PublicKeyInfo} ->
-	    handle_peer_cert(PeerCert, PublicKeyInfo, State);
+	    handle_peer_cert(PeerCert, PublicKeyInfo, 
+			     State#state{client_certificate_requested = false});
 	#alert{} = Alert ->
             handle_own_alert(Alert, Version, certify_certificate, State),
             {stop, normal, State}
