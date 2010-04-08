@@ -155,7 +155,7 @@ all(suite) ->
      upgrade, upgrade_with_timeout, tcp_connect,
      ipv6, ekeyfile, ecertfile, ecacertfile, eoptions, shutdown,
      shutdown_write, shutdown_both, shutdown_error, ciphers, 
-     send_close, dh_params,
+     send_close, close_transport_accept, dh_params,
      server_verify_peer_passive,
      server_verify_peer_active, server_verify_peer_active_once,
      server_verify_none_passive, server_verify_none_active, 
@@ -729,6 +729,32 @@ send_close(Config) when is_list(Config) ->
     gen_tcp:close(TcpS),    
     {error, _} = ssl:send(SslS, "Hello world"),    
     ssl_test_lib:close(Server).
+
+%%--------------------------------------------------------------------
+close_transport_accept(doc) ->
+    ["Tests closing ssl socket when waiting on ssl:transport_accept/1"];
+
+close_transport_accept(suite) ->
+    [];
+
+close_transport_accept(Config) when is_list(Config) ->
+    ServerOpts = ?config(server_opts, Config),
+    {_ClientNode, ServerNode, _Hostname} = ssl_test_lib:run_where(Config),
+
+    Port = 0,
+    Opts = [{active, false} | ServerOpts],
+    {ok, ListenSocket} = rpc:call(ServerNode, ssl, listen, [Port, Opts]),
+    spawn_link(fun() ->
+			test_server:sleep(?SLEEP),
+			rpc:call(ServerNode, ssl, close, [ListenSocket])
+	       end),
+    case rpc:call(ServerNode, ssl, transport_accept, [ListenSocket]) of
+	{error, closed} ->
+	    ok;
+	Other ->
+	    exit({?LINE, Other})
+    end.
+
 %%--------------------------------------------------------------------
 dh_params(doc) -> 
     ["Test to specify DH-params file in server."];
@@ -860,7 +886,7 @@ tcp_connect(Config) when is_list(Config) ->
     Server = ssl_test_lib:start_upgrade_server([{node, ServerNode}, {port, 0},
 						{from, self()},
 						{timeout, 5000},
-						{mfa, {?MODULE, should_close, []}},
+						{mfa, {?MODULE, dummy, []}},
 						{tcp_options, TcpOpts},
 						{ssl_options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
@@ -869,18 +895,20 @@ tcp_connect(Config) when is_list(Config) ->
     test_server:format("Testcase ~p connected to Server ~p ~n", [self(), Server]),
     gen_tcp:send(Socket, "<SOME GARBLED NON SSL MESSAGE>"),
 
-    ssl_test_lib:check_result(Server, {error,esslerrssl}, tcp_closed, Socket),
-
+    receive 
+	{tcp_closed, Socket} ->
+	    receive 
+		{Server, {error, Error}} ->
+		    test_server:format("Error ~p", [Error])
+	    end
+    end,
     ssl_test_lib:close(Server).
 
 
-should_close(Socket) ->
-    receive
-	{ssl, Socket, closed} ->
-	    server_closed;
-	Other ->
-	    exit({?LINE, Other})
-    end.
+dummy(Socket) ->
+    %% Should not happen as the ssl connection will not be established
+    %% due to fatal handshake failiure
+    exit(kill).
 
 %%--------------------------------------------------------------------
 ipv6(doc) ->
