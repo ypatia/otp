@@ -1074,8 +1074,6 @@ eoptions(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server0, {error, {eoptions, {active,trice}}}, 
 		    Client0, {error, {eoptions, {active,trice}}}),
 
-    test_server:sleep(?SLEEP),
-    
     Server1 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
 					 {from, self()},
@@ -1087,9 +1085,6 @@ eoptions(Config) when is_list(Config) ->
 			    {options, [{header, a} | ClientOpts]}]), 
     ssl_test_lib:check_result(Server1, {error, {eoptions, {header, a}}}, 
 		    Client1, {error, {eoptions, {header, a}}}),
-
-    test_server:sleep(?SLEEP),
-
     
     Server2 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port},
@@ -1104,9 +1099,6 @@ eoptions(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server2, {error, {eoptions, {mode, a}}}, 
 		    Client2, {error, {eoptions, {mode, a}}}),
 
-
-    test_server:sleep(?SLEEP),
-
     Server3 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
 					 {from, self()},
@@ -1118,8 +1110,6 @@ eoptions(Config) when is_list(Config) ->
 			    {options, [{packet, 8.0} | ClientOpts]}]),
     ssl_test_lib:check_result(Server3, {error, {eoptions, {packet, 8.0}}}, 
 			      Client3, {error, {eoptions, {packet, 8.0}}}),
-   
-    test_server:sleep(?SLEEP),
 
     %% ssl  
     Server4 =
@@ -1133,8 +1123,6 @@ eoptions(Config) when is_list(Config) ->
 			    {options, [{verify, 4} | ClientOpts]}]),
     ssl_test_lib:check_result(Server4, {error, {eoptions, {verify, 4}}}, 
 		    Client4, {error, {eoptions, {verify, 4}}}),
-
-    test_server:sleep(?SLEEP),
    
     Server5 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
@@ -1147,8 +1135,6 @@ eoptions(Config) when is_list(Config) ->
 			    {options, [{depth, four} | ClientOpts]}]),
     ssl_test_lib:check_result(Server5, {error, {eoptions, {depth, four}}}, 
 		    Client5, {error, {eoptions, {depth, four}}}),
-
-    test_server:sleep(?SLEEP),
     
     Server6 =  
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
@@ -1162,9 +1148,6 @@ eoptions(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server6, {error, {eoptions, {cacertfile, ""}}}, 
 		    Client6, {error, {eoptions, {cacertfile, ""}}}),
 
-
-    test_server:sleep(?SLEEP),
-    
     Server7 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
 					 {from, self()},
@@ -1178,8 +1161,6 @@ eoptions(Config) when is_list(Config) ->
 			      {error, {eoptions, {certfile, 'cert.pem'}}}, 
 		    Client7, {error, {eoptions, {certfile, 'cert.pem'}}}),
     
-    test_server:sleep(?SLEEP),
-
     Server8 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
 					 {from, self()},
@@ -1192,8 +1173,6 @@ eoptions(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server8, 
 			      {error, {eoptions, {keyfile, 'key.pem'}}}, 
 		    Client8, {error, {eoptions, {keyfile, 'key.pem'}}}),
-
-    test_server:sleep(?SLEEP),
     
     Server9 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
@@ -1207,9 +1186,6 @@ eoptions(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server9, {error, {eoptions, {key, 'key.pem'}}}, 
 		    Client9, {error, {eoptions, {key, 'key.pem'}}}),
     
-
-    test_server:sleep(?SLEEP),
-
     Server10 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
 					 {from, self()},
@@ -1221,9 +1197,6 @@ eoptions(Config) when is_list(Config) ->
 			    {options, [{password, foo} | ClientOpts]}]),
     ssl_test_lib:check_result(Server10, {error, {eoptions, {password, foo}}}, 
 		    Client10, {error, {eoptions, {password, foo}}}),
-    
-    test_server:sleep(?SLEEP),
-    
     %% Misc
     Server11 =
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
@@ -1237,9 +1210,6 @@ eoptions(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server11, {error, {eoptions, {ssl_imp, cool}}}, 
 		    Client11, {error, {eoptions, {ssl_imp, cool}}}),
 
-
-    test_server:sleep(?SLEEP),
-    
     Server12 = 
 	ssl_test_lib:start_server_error([{node, ServerNode}, {port, Port}, 
 					 {from, self()},
@@ -2049,8 +2019,6 @@ client_renegotiate(Config) when is_list(Config) ->
 				   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
  
-    test_server:sleep(?SLEEP),
-
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
 					{from, self()}, 
@@ -2087,8 +2055,6 @@ server_renegotiate(Config) when is_list(Config) ->
 					{options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
     
-    test_server:sleep(?SLEEP),
-   
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
 					{from, self()}, 
@@ -2127,8 +2093,6 @@ client_no_wrap_sequence_number(Config) when is_list(Config) ->
 				   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
  
-    test_server:sleep(?SLEEP),
-
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
 					{from, self()}, 
@@ -2170,8 +2134,6 @@ server_no_wrap_sequence_number(Config) when is_list(Config) ->
 					{options, [{renegotiate_at, N} | ServerOpts]}]),
     Port = ssl_test_lib:inet_port(Server),
     
-    test_server:sleep(?SLEEP),
-   
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
 					{from, self()}, 
@@ -2188,13 +2150,11 @@ server_no_wrap_sequence_number(Config) when is_list(Config) ->
 %%--------------------------------------------------------------------
 send_recv_result(Socket) ->
     ssl:send(Socket, "Hello world"),
-    test_server:sleep(?SLEEP),
     {ok,"Hello world"} = ssl:recv(Socket, 11),
     ok.
 
 send_recv_result_active(Socket) ->
     ssl:send(Socket, "Hello world"),
-    test_server:sleep(?SLEEP),
     receive 
 	{ssl, Socket, "Hello world"} ->
 	    ok
@@ -2202,7 +2162,6 @@ send_recv_result_active(Socket) ->
 
 send_recv_result_active_once(Socket) ->
     ssl:send(Socket, "Hello world"),
-    test_server:sleep(?SLEEP),
     receive 
 	{ssl, Socket, "Hello world"} ->
 	    ok
