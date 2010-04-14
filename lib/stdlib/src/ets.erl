@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 1996-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 -module(ets).
@@ -787,7 +787,7 @@ get_header_data(Name,true) ->
     end;
 
 get_header_data(Name, false) ->
-   case wrap_chunk(Name, start, 1, false) of 
+   case wrap_chunk(Name, start, 1, false) of
        {C,[Tup]} when is_tuple(Tup) ->
 	   L = tuple_to_list(Tup),
 	   case verify_header_mandatory(L) of
@@ -832,7 +832,7 @@ md5_and_convert([H|T], MD5State, Count) when is_binary(H) ->
 	{'EXIT', _} ->
 	    md5_and_convert(T,MD5State,Count);
 	['$end_of_table',_Dat] = L ->
-	   {[],MD5State,Count,L}; 
+	   {[],MD5State,Count,L};
 	Term ->
 	    X = erlang:md5_update(MD5State, H),
 	    {Rest,NewMD5,NewCount,NewLast} = md5_and_convert(T, X, Count+1),
