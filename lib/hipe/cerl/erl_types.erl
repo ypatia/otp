@@ -2532,12 +2532,14 @@ t_subst(T, _Dict, _Fun) ->
 %% Unification
 %%
 
--spec t_unify(erl_type(), erl_type()) -> {erl_type(), [{_, erl_type()}]}.
+-type t_unify_ret() :: {erl_type(), [{_, erl_type()}]}.
+
+-spec t_unify(erl_type(), erl_type()) -> t_unify_ret().
 
 t_unify(T1, T2) ->
   t_unify(T1, T2, []).
 
--spec t_unify(erl_type(), erl_type(), [erl_type()]) -> {erl_type(), [{_, erl_type()}]}.
+-spec t_unify(erl_type(), erl_type(), [erl_type()]) -> t_unify_ret().
 
 t_unify(T1, T2, Opaques) ->
   {T, Dict} = t_unify(T1, T2, dict:new(), Opaques),
@@ -2550,7 +2552,7 @@ t_unify(?var(Id1) = T, ?var(Id2), Dict, Opaques) ->
     error -> 
       case dict:find(Id2, Dict) of
 	error -> {T, dict:store(Id2, T, Dict)};
-	{ok, Type} -> {Type, t_unify(T, Type, Dict, Opaques)}
+	{ok, Type} -> t_unify(T, Type, Dict, Opaques)
       end;
     {ok, Type1} ->
       case dict:find(Id2, Dict) of
