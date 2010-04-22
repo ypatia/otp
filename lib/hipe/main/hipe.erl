@@ -939,6 +939,8 @@ assemble(CompiledCode, Closures, Exports, Options) ->
       hipe_sparc_assemble:assemble(CompiledCode, Closures, Exports, Options);
     powerpc ->
       hipe_ppc_assemble:assemble(CompiledCode, Closures, Exports, Options);
+    ppc64 ->
+      hipe_ppc_assemble:assemble(CompiledCode, Closures, Exports, Options);
     arm ->
       hipe_arm_assemble:assemble(CompiledCode, Closures, Exports, Options);
     x86 ->
@@ -1390,6 +1392,8 @@ o1_opts() ->
       Common;
     powerpc ->
       Common;
+    ppc64 ->
+      Common;
     arm ->
       Common -- [inline_fp]; % Pointless optimising for absent hardware
     x86 ->
@@ -1411,6 +1415,8 @@ o2_opts() ->
       Common;
     powerpc ->
       Common;
+    ppc64 ->
+      Common;
     arm ->
       Common;
     x86 ->
@@ -1428,6 +1434,8 @@ o3_opts() ->
     ultrasparc ->
       Common;
     powerpc ->
+      Common;
+    ppc64 ->
       Common;
     arm ->
       Common;

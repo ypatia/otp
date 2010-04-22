@@ -527,6 +527,8 @@ rtl_to_native(MFA, LinearRTL, Options, DebugState) ->
 	hipe_sparc_main:rtl_to_sparc(MFA, LinearRTL, Options);
       powerpc ->
 	hipe_ppc_main:rtl_to_ppc(MFA, LinearRTL, Options);
+      ppc64 ->
+	hipe_ppc_main:rtl_to_ppc(MFA, LinearRTL, Options);
       arm ->
 	hipe_arm_main:rtl_to_arm(MFA, LinearRTL, Options);
       x86 ->

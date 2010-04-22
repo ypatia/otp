@@ -258,7 +258,7 @@ find_callee_mfas(Patches) when is_list(Patches) ->
     amd64 -> [];
     arm -> find_callee_mfas(Patches, gb_sets:empty(), false);
     powerpc -> find_callee_mfas(Patches, gb_sets:empty(), true);
-    %% ppc64 -> find_callee_mfas(Patches, gb_sets:empty(), true);
+    ppc64 -> find_callee_mfas(Patches, gb_sets:empty(), true);
     ultrasparc -> [];
     x86 -> []
   end.
@@ -301,6 +301,7 @@ mk_trampoline_map(CalleeMFAs, Trampolines) ->
   SizeofLong =
     case erlang:system_info(hipe_architecture) of
       amd64 -> 8;
+      ppc64 -> 8;
       _ -> 4
     end,
   mk_trampoline_map(tuple_size(CalleeMFAs), CalleeMFAs,
