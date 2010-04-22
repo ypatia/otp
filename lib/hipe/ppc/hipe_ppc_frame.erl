@@ -400,7 +400,7 @@ mk_temp_map(Formals, ClobbersLR, Temps) ->
 enter_vars([V|Vs], PrevOff, Map) ->
   Off =
     case hipe_ppc:temp_type(V) of
-      'double' -> PrevOff - 2*word_size();
+      'double' -> PrevOff - 8;
       _ -> PrevOff - word_size()
     end,
   enter_vars(Vs, Off, tmap_bind(Map, V, Off));
