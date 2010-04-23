@@ -39,7 +39,7 @@ assemble(CompiledCode, Closures, Exports, Options) ->
 	  || {MFA, Defun} <- CompiledCode],
   %%
   {ConstAlign,ConstSize,ConstMap,RefsFromConsts} =
-    hipe_pack_constants:pack_constants(Code, 4),
+    hipe_pack_constants:pack_constants(Code, hipe_rtl_arch:word_size()),
   %%
   {CodeSize,CodeBinary,AccRefs,LabelMap,ExportMap} =
     encode(translate(Code, ConstMap), Options),
@@ -265,9 +265,20 @@ do_pseudo_li(I, MFA, ConstMap) ->
     end,
   NewDst = do_reg(Dst),
   Simm0 = {simm,0},
-  [{'.reloc', RelocData, #comment{term=reloc}},
-   {addi, {NewDst,{r,0},Simm0}, I},
-   {addis, {NewDst,NewDst,Simm0}, I}].
+  Uimm0 = {uimm,0},
+  case get(hipe_target_arch) of
+    powerpc ->
+      [{'.reloc', RelocData, #comment{term=reloc}},
+       {addi, {NewDst,{r,0},Simm0}, I},
+       {addis, {NewDst,NewDst,Simm0}, I}];
+    ppc64 ->
+      [{'.reloc', RelocData, #comment{term=reloc}},
+       {addis, {NewDst,{r,0},Simm0}, I},   % @highest
+       {ori, {NewDst,NewDst,Uimm0}, I},    % @higher
+       {rldicr, {NewDst,NewDst,{sh6,32},{me6,31}}, I},
+       {oris, {NewDst,NewDst,Uimm0}, I},   % @h
+       {ori, {NewDst,NewDst,Uimm0}, I}]    % @l
+  end.
 
 do_store(I) ->
   #store{stop=StOp,src=Src,disp=Disp,base=Base} = I,

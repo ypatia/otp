@@ -281,13 +281,22 @@ static void patch_imm16(Uint32 *address, unsigned int imm16)
 }
 
 #if defined(__powerpc64__)
+/*
+ * To load a 64-bit immediate value 'val' into Rd (Rd != R0):
+ *
+ * addis Rd, 0, val@highest // (val >> 48) & 0xFFFF
+ * ori Rd, Rd, val@higher   // (val >> 32) & 0xFFFF
+ * rldicr Rd, Rd, 32, 31
+ * oris Rd, Rd, val@h       // (val >> 16) & 0xFFFF
+ * ori Rd, Rd, val@l        // val & 0xFFFF
+ */
 static void patch_li64(Uint32 *address, Uint64 value)
 {
-    patch_imm16(address+0, value >> 48);/* addis r,0,value@highest */
-    patch_imm16(address+1, value >> 32);/* ori r,r,value@higher */
-    /* sldi r,r,32 */
-    patch_imm16(address+3, value >> 16);/* oris r,r,value@h */
-    patch_imm16(address+4, value);	/* ori r,r,value@l */
+    patch_imm16(address+0, value >> 48);
+    patch_imm16(address+1, value >> 32);
+    /* rldicr Rd, Rd, 32, 31 */
+    patch_imm16(address+3, value >> 16);
+    patch_imm16(address+4, value);
 }
 
 static int patch_li31(Uint32 *address, Uint32 value)
@@ -308,11 +317,10 @@ int hipe_patch_insn(void *address, Uint64 value, Eterm type)
     switch (type) {
       case am_closure:
       case am_constant:
-	patch_li64((Uint32*)address, value);
-	return 0;
       case am_atom:
       case am_c_const:
-	return patch_li31((Uint32*)address, value);
+	patch_li64((Uint32*)address, value);
+	return 0;
       default:
 	return -1;
     }
