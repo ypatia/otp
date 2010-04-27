@@ -1,19 +1,19 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 1999-2009. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 1999-2010. All Rights Reserved.
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 -module(otp_internal).
@@ -265,69 +265,69 @@ obsolete_1(ftp, force_active, 1)  -> {deprecated,{inets,start,[2,3]},"R14B"};
 
 %% Added in R12B-4.
 obsolete_1(ssh_cm, connect, A) when 1 =< A, A =< 3 ->
-    {deprecated,{ssh,connect,A},"R14B"};
+    {removed,{ssh,connect,A},"R14B"};
 obsolete_1(ssh_cm, listen, A) when 2 =< A, A =< 4 ->
-    {deprecated,{ssh,daemon,A},"R14B"};
+    {removed,{ssh,daemon,A},"R14B"};
 obsolete_1(ssh_cm, stop_listener, 1) ->
-    {deprecated,{ssh,stop_listener,[1,2]},"R14B"};
+    {removed,{ssh,stop_listener,[1,2]},"R14B"};
 obsolete_1(ssh_cm, session_open, A) when A =:= 2; A =:= 4 ->
-    {deprecated,{ssh_connection,session_channel,A},"R14B"};
+    {removed,{ssh_connection,session_channel,A},"R14B"};
 obsolete_1(ssh_cm, direct_tcpip, A) when A =:= 6; A =:= 8 ->
-    {deprecated,{ssh_connection,direct_tcpip,A}};
+    {removed,{ssh_connection,direct_tcpip,A}};
 obsolete_1(ssh_cm, tcpip_forward, 3) ->
-    {deprecated,{ssh_connection,tcpip_forward,3},"R14B"};
+    {removed,{ssh_connection,tcpip_forward,3},"R14B"};
 obsolete_1(ssh_cm, cancel_tcpip_forward, 3) ->
-    {deprecated,{ssh_connection,cancel_tcpip_forward,3},"R14B"};
+    {removed,{ssh_connection,cancel_tcpip_forward,3},"R14B"};
 obsolete_1(ssh_cm, open_pty, A) when A =:= 3; A =:= 7; A =:= 9 ->
-    {deprecated,{ssh_connection,open_pty,A},"R14"};
+    {removed,{ssh_connection,open_pty,A},"R14"};
 obsolete_1(ssh_cm, setenv, 5) ->
-    {deprecated,{ssh_connection,setenv,5},"R14B"};
+    {removed,{ssh_connection,setenv,5},"R14B"};
 obsolete_1(ssh_cm, shell, 2) ->
-    {deprecated,{ssh_connection,shell,2},"R14B"};
+    {removed,{ssh_connection,shell,2},"R14B"};
 obsolete_1(ssh_cm, exec, 4) ->
-    {deprecated,{ssh_connection,exec,4},"R14B"};
+    {removed,{ssh_connection,exec,4},"R14B"};
 obsolete_1(ssh_cm, subsystem, 4) ->
-    {deprecated,{ssh_connection,subsystem,4},"R14B"};
+    {removed,{ssh_connection,subsystem,4},"R14B"};
 obsolete_1(ssh_cm, winch, A) when A =:= 4; A =:= 6 ->
-    {deprecated,{ssh_connection,window_change,A},"R14B"};
+    {removed,{ssh_connection,window_change,A},"R14B"};
 obsolete_1(ssh_cm, signal, 3) ->
-    {deprecated,{ssh_connection,signal,3},"R14B"};
+    {removed,{ssh_connection,signal,3},"R14B"};
 obsolete_1(ssh_cm, attach, A) when A =:= 2; A =:= 3 ->
-    {deprecated,{ssh,attach,A}};
+    {removed,{ssh,attach,A}};
 obsolete_1(ssh_cm, detach, 2) ->
-    {deprecated,"no longer useful; will be removed in R14B"};
+    {removed,"no longer useful; will be removed in R14B"};
 obsolete_1(ssh_cm, set_user_ack, 4) ->
-    {deprecated,"no longer useful; will be removed in R14B"};
+    {removed,"no longer useful; will be removed in R14B"};
 obsolete_1(ssh_cm, adjust_window, 3) ->
-    {deprecated,{ssh_connection,adjust_window,3},"R14B"};
+    {removed,{ssh_connection,adjust_window,3},"R14B"};
 obsolete_1(ssh_cm, close, 2) ->
-    {deprecated,{ssh_connection,close,2},"R14B"};
+    {removed,{ssh_connection,close,2},"R14B"};
 obsolete_1(ssh_cm, stop, 1) ->
-    {deprecated,{ssh,close,1},"R14B"};
+    {removed,{ssh,close,1},"R14B"};
 obsolete_1(ssh_cm, send_eof, 2) ->
-    {deprecated,{ssh_connection,send_eof,2},"R14B"};
+    {removed,{ssh_connection,send_eof,2},"R14B"};
 obsolete_1(ssh_cm, send, A) when A =:= 3; A =:= 4 ->
-    {deprecated,{ssh_connection,send,A},"R14B"};
+    {removed,{ssh_connection,send,A},"R14B"};
 obsolete_1(ssh_cm, send_ack, A) when 3 =< A, A =< 5 ->
-    {deprecated,{ssh_connection,send,[3,4]},"R14B"};
+    {removed,{ssh_connection,send,[3,4]},"R14B"};
 obsolete_1(ssh_ssh, connect, A) when 1 =< A, A =< 3 ->
-    {deprecated,{ssh,shell,A},"R14B"};
+    {removed,{ssh,shell,A},"R14B"};
 obsolete_1(ssh_sshd, listen, A) when 0 =< A, A =< 3 ->
-    {deprecated,{ssh,daemon,[1,2,3]},"R14"};
+    {removed,{ssh,daemon,[1,2,3]},"R14"};
 obsolete_1(ssh_sshd, stop, 1) ->
-    {deprecated,{ssh,stop_listener,1}};
+    {removed,{ssh,stop_listener,1}};
 
 %% Added in R13A.
 obsolete_1(regexp, _, _) ->
     {deprecated, "the regexp module is deprecated (will be removed in R15A); use the re module instead"};
 
 obsolete_1(lists, flat_length, 1) ->
-    {deprecated,{lists,flatlength,1},"R14"};
+    {removed,{lists,flatlength,1},"R14"};
 
 obsolete_1(ssh_sftp, connect, A) when 1 =< A, A =< 3 ->
-    {deprecated,{ssh_sftp,start_channel,A},"R14B"};
+    {removed,{ssh_sftp,start_channel,A},"R14B"};
 obsolete_1(ssh_sftp, stop, 1) ->
-    {deprecated,{ssh_sftp,stop_channel,1},"R14B"};
+    {removed,{ssh_sftp,stop_channel,1},"R14B"};
 
 %% Added in R13B01.
 obsolete_1(ssl_pkix, decode_cert_file, A) when A =:= 1; A =:= 2 ->
@@ -337,7 +337,7 @@ obsolete_1(ssl_pkix, decode_cert, A) when A =:= 1; A =:= 2 ->
 
 %% Added in R13B04.
 obsolete_1(erlang, concat_binary, 1) ->
-    {deprecated,{erlang,list_to_binary,1},"R14B"};
+    {deprecated,{erlang,list_to_binary,1},"R15B"};
     
 obsolete_1(_, _, _) ->
     no.
