@@ -43,9 +43,9 @@
                 exports_main :: boolean(),
                 has_records  :: boolean()}).
 
--type shebang() :: string().
--type comment() :: string().
--type emu_args() :: string().
+-type shebang()  :: string() | 'default' | 'undefined'.
+-type comment()  :: string() | 'default' | 'undefined'.
+-type emu_args() :: string() | 'undefined'.
 
 -record(sections, {type,
 		   shebang  :: shebang(),
@@ -155,7 +155,7 @@ prepare([], #sections{type = Type}) ->
 prepare(BadOptions, _) ->
     throw({badarg, BadOptions}).
 
--type section_name() :: shebang | comment | emu_args | body .
+-type section_name() :: shebang | comment | emu_args | body.
 -type extract_option() :: compile_source | {section, [section_name()]}.
 -spec extract(file:filename(), [extract_option()]) ->
         {ok, [section()]} | {error, term()}.

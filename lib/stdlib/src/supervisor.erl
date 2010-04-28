@@ -160,11 +160,13 @@ check_childspecs(X) -> {error, {badarg, X}}.
 %%% 
 %%% ---------------------------------------------------
 
+-type init_sup_name() :: sup_name() | 'self'.
+
 -type stop_rsn() :: 'shutdown' | {'bad_return', {module(),'init', term()}}
                   | {'bad_start_spec', term()} | {'start_spec', term()}
                   | {'supervisor_data', term()}.
 
--spec init({sup_name(), module(), [term()]}) -> 
+-spec init({init_sup_name(), module(), [term()]}) -> 
         {'ok', state()} | 'ignore' | {'stop', stop_rsn()}.
 
 init({SupName, Mod, Args}) ->
