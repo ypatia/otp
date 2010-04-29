@@ -214,7 +214,12 @@ do_label(I) ->
 do_load(I) ->
   #load{ldop=LdOp,dst=Dst,disp=Disp,base=Base} = I,
   NewDst = do_reg(Dst),
-  NewDisp = do_disp(Disp),
+  NewDisp =
+    case LdOp of
+      'ld' -> do_disp_ds(Disp);
+      'ldu' -> do_disp_ds(Disp);
+      _ -> do_disp(Disp)
+    end,
   NewBase = do_reg(Base),
   [{LdOp, {NewDst,NewDisp,NewBase}, I}].
 
@@ -283,7 +288,12 @@ do_pseudo_li(I, MFA, ConstMap) ->
 do_store(I) ->
   #store{stop=StOp,src=Src,disp=Disp,base=Base} = I,
   NewSrc = do_reg(Src),
-  NewDisp = do_disp(Disp),
+  NewDisp =
+    case StOp of
+      'std' ->  do_disp_ds(Disp);
+      'stdu' ->  do_disp_ds(Disp);
+      _ -> do_disp(Disp)
+    end,
   NewBase = do_reg(Base),
   [{StOp, {NewSrc,NewDisp,NewBase}, I}].
 
@@ -354,6 +364,10 @@ do_reg_or_imm(Src) ->
 
 do_disp(Disp) when is_integer(Disp), -32768 =< Disp, Disp =< 32767 ->
   {d, Disp band 16#ffff}.
+
+do_disp_ds(Disp) when is_integer(Disp),
+		      -32768 =< Disp, Disp =< 32767, Disp band 3 =:= 0 ->
+  {ds, (Disp band 16#ffff) bsr 2}.
 
 do_spr(SPR) ->
   SPR_NR =

@@ -103,12 +103,12 @@ do_pseudo_move(I, Context, FPoff) ->
   case temp_is_pseudo(Dst) of
     true ->
       Offset = pseudo_offset(Dst, FPoff, Context),
-      mk_store('stw', Src, Offset, mk_sp(), []);
+      mk_store(hipe_ppc:stop_word(), Src, Offset, mk_sp(), []);
     _ ->
       case temp_is_pseudo(Src) of
 	true ->
 	  Offset = pseudo_offset(Src, FPoff, Context),
-	  mk_load('lwz', Dst, Offset, mk_sp(), []);
+	  mk_load(hipe_ppc:ldop_word(), Dst, Offset, mk_sp(), []);
 	_ ->
 	  [hipe_ppc:mk_alu('or', Dst, Src, Src)]
       end
@@ -152,7 +152,7 @@ restore_lr(FPoff, Context, Rest) ->
     false -> Rest;
     true ->
       Temp = mk_temp1(),
-      mk_load('lwz', Temp, FPoff - word_size(), mk_sp(),
+      mk_load(hipe_ppc:ldop_word(), Temp, FPoff - word_size(), mk_sp(),
 	      [hipe_ppc:mk_mtspr('lr', Temp) |
 	       Rest])
   end.
@@ -324,8 +324,8 @@ simple_moves([{SrcOff,DstOff,Type}|Moves], FPoff, TempReg, Rest) ->
   LoadOff = FPoff+SrcOff,
   StoreOff = FPoff+DstOff,
   simple_moves(Moves, FPoff, TempReg,
-	       mk_load('lwz', Temp, LoadOff, SP,
-		       mk_store('stw', Temp, StoreOff, SP,
+	       mk_load(hipe_ppc:ldop_word(), Temp, LoadOff, SP,
+		       mk_store(hipe_ppc:stop_word(), Temp, StoreOff, SP,
 				Rest)));
 simple_moves([], _, _, Rest) ->
   Rest.
@@ -343,7 +343,8 @@ store_moves([{Src,DstOff}|Moves], FPoff, TempReg, Rest) ->
 	{Temp, hipe_ppc:mk_li(Temp, Src)}
     end,
   store_moves(Moves, FPoff, TempReg,
-	      FixSrc ++ mk_store('stw', NewSrc, StoreOff, SP, Rest));
+	      FixSrc ++ mk_store(hipe_ppc:stop_word(), NewSrc,
+				 StoreOff, SP, Rest));
 store_moves([], _, _, Rest) ->
   Rest.
 
@@ -454,7 +455,8 @@ do_prologue(CFG, Context) ->
       AllocFrameCodeTail =
 	case ClobbersLR of
 	  false -> GotoOldStartCode;
-	  true -> mk_store('stw', Temp1, FrameSize-word_size(), SP, GotoOldStartCode)
+	  true -> mk_store(hipe_ppc:stop_word(), Temp1,
+			   FrameSize-word_size(), SP, GotoOldStartCode)
 	end,
       %%
       Arity = context_arity(Context),
@@ -484,7 +486,7 @@ do_prologue(CFG, Context) ->
 		true -> [hipe_ppc:mk_mfspr(Temp1, 'lr') | NewStartCodeTail2]
 	      end,
 	    NewStartCode0 =
-	      [hipe_ppc:mk_load('lwz', Temp1, ?P_NSP_LIMIT, P) |
+	      [hipe_ppc:mk_load(hipe_ppc:ldop_word(), Temp1, ?P_NSP_LIMIT, P) |
 	       hipe_ppc:mk_addi(Temp2, SP, -MaxStack,
 				[hipe_ppc:mk_cmp('cmpl', Temp2, Temp1) |
 				 NewStartCodeTail1])],

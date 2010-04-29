@@ -848,7 +848,7 @@ mk_store_args([Arg|Args], PrevOffset, Tail) ->
 	Tmp = new_tagged_temp(),
 	{Tmp, mk_li(Tmp, Arg)}
     end,
-  Store = hipe_ppc:mk_store('stw', Src, Offset, mk_sp()),
+  Store = hipe_ppc:mk_store(hipe_ppc:stop_word(), Src, Offset, mk_sp()),
   mk_store_args(Args, Offset, FixSrc ++ [Store | Tail]);
 mk_store_args([], _, Tail) ->
   Tail.
@@ -890,25 +890,19 @@ conv_load(I, Map, Data) ->
   {I2, Map2, Data}.
 
 mk_load(Dst, Base1, Base2, LoadSize, LoadSign) ->
-  Rest =
-    case LoadSize of
-      byte ->
-	case LoadSign of
-	  signed -> [hipe_ppc:mk_unary('extsb', Dst, Dst)];
-	  _ -> []
+  {LdOp, Rest} =
+    case {LoadSize, LoadSign} of
+      {byte, signed} -> {'lbz', [hipe_ppc:mk_unary('extsb', Dst, Dst)]};
+      {byte, unsigned} -> {'lbz', []};
+      {int16, signed} -> {'lha', []};
+      {int16, unsigned} -> {'lhz', []};
+      {int32, signed} ->
+	case get(hipe_target_arch) of
+	  powerpc -> {'lwz', []};
+	  ppc64 -> {'lwa', []}
 	end;
-      _ -> []
-    end,
-  LdOp =
-    case LoadSize of
-      byte -> 'lbz';
-      int32 -> 'lwz';
-      word -> 'lwz';
-      int16 ->
-	case LoadSign of
-	  signed -> 'lha';
-	  unsigned -> 'lhz'
-	end
+      {int32, unsigned} -> {'lwz', []};
+      {word, _} -> {hipe_ppc:ldop_word(), []}
     end,
   case hipe_ppc:is_temp(Base1) of
     true ->
@@ -987,7 +981,7 @@ mk_store(Src, Base1, Base2, StoreSize) ->
       byte -> 'stb';
       int16 -> 'sth';
       int32 -> 'stw';
-      word -> 'stw'
+      word -> hipe_ppc:stop_word()
     end,
   case hipe_ppc:is_temp(Src) of
     true ->
@@ -1032,7 +1026,7 @@ conv_switch(I, Map, Data) ->
   I2 =
     [hipe_ppc:mk_pseudo_li(JTabR, {JTabLab,constant}),
      hipe_ppc:mk_alu('slwi', OffsetR, IndexR, hipe_ppc:mk_uimm16(2)),
-     hipe_ppc:mk_loadx('lwzx', DestR, JTabR, OffsetR),
+     hipe_ppc:mk_loadx(hipe_ppc:ldop_wordx(), DestR, JTabR, OffsetR),
      hipe_ppc:mk_mtspr('ctr', DestR),
      hipe_ppc:mk_bctr(Labels)],
   {I2, Map1, NewData}.

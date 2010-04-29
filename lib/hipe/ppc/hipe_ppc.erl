@@ -73,6 +73,8 @@
 	 mk_loadx/4,
 	 mk_load/6,
 	 ldop_to_ldxop/1,
+	 ldop_word/0,
+	 ldop_wordx/0,
 
 	 mk_mfspr/2,
 
@@ -110,6 +112,8 @@
 	 mk_storex/4,
 	 mk_store/6,
 	 stop_to_stxop/1,
+	 stop_word/0,
+	 stop_wordx/0,
 
 	 mk_unary/3,
 
@@ -260,8 +264,15 @@ mk_loadx(LdxOp, Dst, Base1, Base2) ->
   #loadx{ldxop=LdxOp, dst=Dst, base1=Base1, base2=Base2}.
 
 mk_load(LdOp, Dst, Offset, Base, Scratch, Rest) when is_integer(Offset) ->
-  if Offset >= -32768, Offset =< 32767 ->
-      [mk_load(LdOp, Dst, Offset, Base) | Rest];
+  RequireAlignment =
+    case LdOp of
+      'ld' -> true;
+      'ldx' -> true;
+      _ -> false
+    end,
+  if Offset >= -32768, Offset =< 32767,
+     not RequireAlignment orelse Offset band 3 =:= 0 ->
+	  [mk_load(LdOp, Dst, Offset, Base) | Rest];
      true ->
       LdxOp = ldop_to_ldxop(LdOp),
       Index =
@@ -281,7 +292,21 @@ ldop_to_ldxop(LdOp) ->
     'lbz' -> 'lbzx';
     'lha' -> 'lhax';
     'lhz' -> 'lhzx';
-    'lwz' -> 'lwzx'
+    'lwa' -> 'lwax';
+    'lwz' -> 'lwzx';
+    'ld' -> 'ldx'
+  end.
+
+ldop_word() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'lwz';
+    ppc64 -> 'ld'
+  end.
+
+ldop_wordx() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'lwzx';
+    ppc64 -> 'ldx'
   end.
 
 mk_scratch(Scratch) ->
@@ -354,7 +379,14 @@ mk_storex(StxOp, Src, Base1, Base2) ->
   #storex{stxop=StxOp, src=Src, base1=Base1, base2=Base2}.
 
 mk_store(StOp, Src, Offset, Base, Scratch, Rest)when is_integer(Offset) ->
-  if Offset >= -32768, Offset =< 32767 ->
+  RequireAlignment =
+    case StOp of
+      'std' -> true;
+      'stdx' -> true;
+      _ -> false
+    end,
+  if Offset >= -32768, Offset =< 32767,
+     not RequireAlignment orelse Offset band 3 =:= 0 ->
       [mk_store(StOp, Src, Offset, Base) | Rest];
      true ->
       StxOp = stop_to_stxop(StOp),
@@ -367,7 +399,20 @@ stop_to_stxop(StOp) ->
   case StOp of
     'stb' -> 'stbx';
     'sth' -> 'sthx';
-    'stw' -> 'stwx'
+    'stw' -> 'stwx';
+    'std' -> 'stdx'
+  end.
+
+stop_word() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'stw';
+    ppc64 -> 'std'
+  end.
+
+stop_wordx() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'stwx';
+    ppc64 -> 'stdx'
   end.
 
 mk_unary(UnOp, Dst, Src) -> #unary{unop=UnOp, dst=Dst, src=Src}.
