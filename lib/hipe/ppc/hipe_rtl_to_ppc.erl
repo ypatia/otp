@@ -110,20 +110,27 @@ conv_fconv(I, Map, Data) ->
 
 mk_fconv(Dst, Src) ->
   CSP = hipe_ppc:mk_temp(1, 'untagged'),
-  R0 = hipe_ppc:mk_temp(0, 'untagged'),
-  RTmp1 = hipe_ppc:mk_new_temp('untagged'),
-  RTmp2 = hipe_ppc:mk_new_temp('untagged'),
-  RTmp3 = hipe_ppc:mk_new_temp('untagged'),
-  FTmp1 = hipe_ppc:mk_new_temp('double'),
-  FTmp2 = hipe_ppc:mk_new_temp('double'),
-  [hipe_ppc:mk_pseudo_li(RTmp1, {fconv_constant,c_const}),
-   hipe_ppc:mk_lfd(FTmp1, 0, RTmp1),
-   hipe_ppc:mk_alu('xoris', RTmp2, Src, hipe_ppc:mk_uimm16(16#8000)),
-   hipe_ppc:mk_store('stw', RTmp2, 28, CSP),
-   hipe_ppc:mk_alu('addis', RTmp3, R0, hipe_ppc:mk_simm16(16#4330)),
-   hipe_ppc:mk_store('stw', RTmp3, 24, CSP),
-   hipe_ppc:mk_lfd(FTmp2, 24, CSP),
-   hipe_ppc:mk_fp_binary('fsub', Dst, FTmp2, FTmp1)].
+  case get(hipe_target_arch) of
+    powerpc ->
+      R0 = hipe_ppc:mk_temp(0, 'untagged'),
+      RTmp1 = hipe_ppc:mk_new_temp('untagged'),
+      RTmp2 = hipe_ppc:mk_new_temp('untagged'),
+      RTmp3 = hipe_ppc:mk_new_temp('untagged'),
+      FTmp1 = hipe_ppc:mk_new_temp('double'),
+      FTmp2 = hipe_ppc:mk_new_temp('double'),
+      [hipe_ppc:mk_pseudo_li(RTmp1, {fconv_constant,c_const}),
+       hipe_ppc:mk_lfd(FTmp1, 0, RTmp1),
+       hipe_ppc:mk_alu('xoris', RTmp2, Src, hipe_ppc:mk_uimm16(16#8000)),
+       hipe_ppc:mk_store('stw', RTmp2, 28, CSP),
+       hipe_ppc:mk_alu('addis', RTmp3, R0, hipe_ppc:mk_simm16(16#4330)),
+       hipe_ppc:mk_store('stw', RTmp3, 24, CSP),
+       hipe_ppc:mk_lfd(FTmp2, 24, CSP),
+       hipe_ppc:mk_fp_binary('fsub', Dst, FTmp2, FTmp1)];
+    ppc64 ->
+      [hipe_ppc:mk_store('std', Src, 24, CSP),
+       hipe_ppc:mk_lfd(Dst, 24, CSP),
+       hipe_ppc:mk_fp_unary('fcfid', Dst, Dst)]
+  end.
 
 conv_fmove(I, Map, Data) ->
   %% Dst := Src, where both Dst and Src are FP regs
