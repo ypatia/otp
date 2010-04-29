@@ -689,17 +689,17 @@ mk_branch_ri(Src1, BCond, Sign, Src2, TrueLab, FalseLab, Pred) ->
     case Sign of
       'signed' ->
 	if is_integer(Src2), -32768 =< Src2, Src2 < 32768 ->
-	    {[], hipe_ppc:mk_simm16(Src2), 'cmpi'};
+	    {[], hipe_ppc:mk_simm16(Src2), hipe_ppc:cmpiop_word()};
 	   true ->
 	    Tmp = new_untagged_temp(),
-	    {mk_li(Tmp, Src2), Tmp, 'cmp'}
+	    {mk_li(Tmp, Src2), Tmp, hipe_ppc:cmpop_word()}
 	end;
       'unsigned' ->
 	if is_integer(Src2), 0 =< Src2, Src2 < 65536 ->
-	    {[], hipe_ppc:mk_uimm16(Src2), 'cmpli'};
+	    {[], hipe_ppc:mk_uimm16(Src2), hipe_ppc:cmpliop_word()};
 	   true ->
 	    Tmp = new_untagged_temp(),
-	    {mk_li(Tmp, Src2), Tmp, 'cmpl'}
+	    {mk_li(Tmp, Src2), Tmp, hipe_ppc:cmplop_word()}
 	end
     end,
   FixSrc2 ++
@@ -708,8 +708,8 @@ mk_branch_ri(Src1, BCond, Sign, Src2, TrueLab, FalseLab, Pred) ->
 mk_branch_rr(Src1, BCond, Sign, Src2, TrueLab, FalseLab, Pred) ->
   CmpOp =
     case Sign of
-      'signed' -> 'cmp';
-      'unsigned' -> 'cmpl'
+      'signed' -> hipe_ppc:cmpop_word();
+      'unsigned' -> hipe_ppc:cmplop_word()
     end,
   mk_cmp_bc(CmpOp, Src1, Src2, BCond, TrueLab, FalseLab, Pred).
 

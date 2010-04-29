@@ -58,6 +58,10 @@
 	 mk_blr/0,
 
 	 mk_cmp/3,
+	 cmpop_word/0,
+	 cmpiop_word/0,
+	 cmplop_word/0,
+	 cmpliop_word/0,
 
 	 mk_comment/1,
 
@@ -192,6 +196,31 @@ mk_bl(Fun, SDesc, Linkage) -> #bl{'fun'=Fun, sdesc=SDesc, linkage=Linkage}.
 mk_blr() -> #blr{}.
 
 mk_cmp(CmpOp, Src1, Src2) -> #cmp{cmpop=CmpOp, src1=Src1, src2=Src2}.
+
+cmpop_word() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'cmp';
+    ppc64 -> 'cmpd'
+  end.
+
+cmpiop_word() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'cmpi';
+    ppc64 -> 'cmpdi'
+  end.
+
+cmplop_word() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'cmpl';
+    ppc64 -> 'cmpld'
+  end.
+
+cmpliop_word() ->
+  case get(hipe_target_arch) of
+    powerpc -> 'cmpli';
+    ppc64 -> 'cmpldi'
+  end.
+
 
 mk_comment(Term) -> #comment{term=Term}.
 

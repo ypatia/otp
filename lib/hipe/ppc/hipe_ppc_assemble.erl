@@ -205,7 +205,18 @@ do_cmp(I) ->
   #cmp{cmpop=CmpOp,src1=Src1,src2=Src2} = I,
   NewSrc1 = do_reg(Src1),
   NewSrc2 = do_reg_or_imm(Src2),
-  [{CmpOp, {{crf,0},0,NewSrc1,NewSrc2}, I}].
+  {RealOp,L} =
+    case CmpOp of
+      'cmpd' -> {'cmp',1};
+      'cmpdi' -> {'cmpi',1};
+      'cmpld' -> {'cmpl',1};
+      'cmpldi' -> {'cmpli',1};
+      'cmp' -> {CmpOp,0};
+      'cmpi' -> {CmpOp,0};
+      'cmpl' -> {CmpOp,0};
+      'cmpli' -> {CmpOp,0}
+    end,
+  [{RealOp, {{crf,0},L,NewSrc1,NewSrc2}, I}].
 
 do_label(I) ->
   #label{label=Label} = I,
