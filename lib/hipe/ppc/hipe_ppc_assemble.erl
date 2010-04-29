@@ -159,6 +159,13 @@ do_alu(I) ->
       'srwi.' -> {'rlwinm.', do_srwi_opnds(NewDst, NewSrc1, NewSrc2)};
       'srawi' -> {'srawi', {NewDst,NewSrc1,do_srawi_src2(NewSrc2)}};
       'srawi.' -> {'srawi.', {NewDst,NewSrc1,do_srawi_src2(NewSrc2)}};
+      %ppc64 extension
+      'sldi' -> {'rldicr', do_sldi_opnds(NewDst, NewSrc1, NewSrc2)};
+      'sldi.' -> {'rldicr.', do_sldi_opnds(NewDst, NewSrc1, NewSrc2)};
+      'srdi' -> {'rldicl', do_srdi_opnds(NewDst, NewSrc1, NewSrc2)};
+      'srdi.' -> {'rldicl.', do_srdi_opnds(NewDst, NewSrc1, NewSrc2)};
+      'sradi' -> {'sradi', {NewDst,NewSrc1,do_sradi_src2(NewSrc2)}};
+      'sradi.' -> {'sradi.', {NewDst,NewSrc1,do_sradi_src2(NewSrc2)}};
       _ -> {AluOp, {NewDst,NewSrc1,NewSrc2}}
     end,
   [{NewI, NewOpnds, I}].
@@ -170,6 +177,16 @@ do_srwi_opnds(Dst, Src1, {uimm,N}) when is_integer(N), 0 =< N, N < 32 ->
   {Dst, Src1, {sh,32-N}, {mb,N}, {me,31}}.
 
 do_srawi_src2({uimm,N}) when  is_integer(N), 0 =< N, N < 32 -> {sh,N}.
+
+%%ppc64 extension
+do_sldi_opnds(Dst, Src1, {uimm,N}) when is_integer(N), 0 =< N, N < 64 ->
+  {Dst, Src1, {sh6,N}, {me6,63-N}}.
+
+do_srdi_opnds(Dst, Src1, {uimm,N}) when is_integer(N), 0 =< N, N < 64 ->
+  {Dst, Src1, {sh6,64-N}, {mb6,N}}.
+
+do_sradi_src2({uimm,N}) when  is_integer(N), 0 =< N, N < 64 -> {sh6,N}.
+
 
 do_b_fun(I) ->
   #b_fun{'fun'=Fun,linkage=Linkage} = I,
