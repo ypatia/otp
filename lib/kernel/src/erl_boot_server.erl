@@ -181,9 +181,9 @@ init(Slaves) ->
     process_flag(trap_exit, true),
     {ok, #state{priority = 0,
 		version = erlang:system_info(version),
-		udp_sock = U, 
+		udp_sock = U,
 		udp_port = UPort,
-		listen_sock = L, 
+		listen_sock = L,
 		listen_port = Port,
 		slaves = ordsets:from_list(Slaves),
 		bootp = Pid

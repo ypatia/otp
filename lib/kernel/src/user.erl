@@ -168,7 +168,7 @@ server_loop(Port, Q) ->
 
 get_fd_geometry(Port) ->
     case (catch port_control(Port,?CTRL_OP_GET_WINSIZE,[])) of
-	List when length(List) =:= 8 -> 
+	List when length(List) =:= 8 ->
 	    <<W:32/native,H:32/native>> = list_to_binary(List),
 	    {W,H};
 	_ ->

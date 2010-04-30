@@ -1369,7 +1369,7 @@ times() ->
 %% lookup and remove old entries
 
 do_lookup_rr(Domain, Class, Type) ->
-    match_rr(#dns_rr{domain = tolower(Domain), class = Class,type = Type, 
+    match_rr(#dns_rr{domain = tolower(Domain), class = Class,type = Type,
 		     cnt = '_', tm = '_', ttl = '_',
 		     bm = '_', func = '_', data = '_'}).
 

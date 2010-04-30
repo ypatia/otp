@@ -524,7 +524,7 @@ init(Init, Kernel) ->
     end.
 
 
-%% Check the syntax of the .config file 
+%% Check the syntax of the .config file
 %%  [{ApplicationName, [{Parameter, Value}]}].
 
 check_conf_data([]) ->
@@ -637,7 +637,7 @@ handle_call({load_application, Application}, From, S) ->
 	    end;
 	{error, _} = Error ->
 	    {reply, Error, S};
-	{'EXIT', R} -> 
+	{'EXIT', R} ->
 	    {reply, {error, R}, S}
     end;
 
@@ -941,7 +941,7 @@ handle_application_started(AppName, Res, S) ->
 			    #state{running = StopRunning, started = StopStarted} = NewS,
 			    case lists:keyfind(AppName, 1, StopRunning) of
 				{_AppName, Id} ->
-				    {_AppName2, Type} = 
+				    {_AppName2, Type} =
 					lists:keyfind(AppName, 1, StopStarted),
 				    stop_appl(AppName, Id, Type),
 				    NStopRunning = keydelete(AppName, 1, StopRunning),
@@ -1732,6 +1732,7 @@ do_config_change([{App, _Id} | Apps], EnvBefore, Errors) ->
 	{error, NewError} ->
 	    do_config_change(Apps, EnvBefore,[NewError | Errors])
     end.
+
 
     
 %%-----------------------------------------------------------------

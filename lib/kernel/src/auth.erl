@@ -182,7 +182,7 @@ handle_call(echo, _From, O) ->
 
 handle_cast({print,What,Args}, O) ->
   %% always allow print outs
-  error_logger:error_msg(What, Args), 
+  error_logger:error_msg(What, Args),
   {noreply, O}.
 
 %% A series of bad messages that may come (from older distribution versions).
