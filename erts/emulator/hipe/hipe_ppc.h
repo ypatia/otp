@@ -44,6 +44,14 @@ static __inline__ int hipe_word32_address_ok(void *address)
     return ((unsigned long)address & 0x3) == 0;
 }
 
+#if defined(__powerpc64__)
+/* for hipe_bifs_{read,write}_{s,u}64 */
+static __inline__ int hipe_word64_address_ok(void *address)
+{
+    return ((unsigned long)address & 0x7) == 0;
+}
+#endif
+
 /* Native stack growth direction. */
 #define HIPE_NSTACK_GROWS_DOWN
 
