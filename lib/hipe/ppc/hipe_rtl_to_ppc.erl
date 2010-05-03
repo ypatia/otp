@@ -1023,9 +1023,15 @@ conv_switch(I, Map, Data) ->
   JTabR = new_untagged_temp(),
   OffsetR = new_untagged_temp(),
   DestR = new_untagged_temp(),
+  ShiftInstruction =
+    case get(hipe_target_arch) of
+      powerpc -> 'slwi';
+      ppc64 -> 'sldi'
+    end,
   I2 =
     [hipe_ppc:mk_pseudo_li(JTabR, {JTabLab,constant}),
-     hipe_ppc:mk_alu('slwi', OffsetR, IndexR, hipe_ppc:mk_uimm16(2)),
+     hipe_ppc:mk_alu(ShiftInstruction, OffsetR, IndexR,
+		     hipe_ppc:mk_uimm16(log2_word_size())),
      hipe_ppc:mk_loadx(hipe_ppc:ldop_wordx(), DestR, JTabR, OffsetR),
      hipe_ppc:mk_mtspr('ctr', DestR),
      hipe_ppc:mk_bctr(Labels)],
@@ -1248,3 +1254,6 @@ vmap_bind(Map, Key, Val) ->
 
 word_size() ->
   hipe_rtl_arch:word_size().
+
+log2_word_size() ->
+  hipe_rtl_arch:log2_word_size().
