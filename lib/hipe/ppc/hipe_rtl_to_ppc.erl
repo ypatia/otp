@@ -631,45 +631,29 @@ mk_alub_ri_Rc_andi(Dst, Src1, Src2) ->
   end.
 
 mk_alub_ri_Rc_shift(Dst, Src1, AluOp, Src2) ->
-  case get(hipe_target_arch) of
-    powerpc ->
-      if Src2 < 32, Src2 >= 0 ->
-	  AluOpIDot =
-	    case AluOp of
-	      'slw'  -> 'slwi.'; % alias for rlwinm.
-	      'srw'  -> 'srwi.'; % alias for rlwinm.
-	      'sraw' -> 'srawi.'
-	    end,
-	  [hipe_ppc:mk_alu(AluOpIDot, Dst, Src1,
-			   hipe_ppc:mk_uimm16(Src2))];
-	 true ->
-	  AluOpDot =
-	    case AluOp of
-	      'slw'  -> 'slw.';
-	      'srw'  -> 'srw.';
-	      'sraw' -> 'sraw.'
-	    end,
-	  mk_alub_ri_Rc_rr(Dst, Src1, AluOpDot, Src2)
-      end;
-    ppc64 ->
-      if Src2 < 64, Src2 >= 0 ->
-	  AluOpIDot =
-	    case AluOp of
-	      'slw'  -> 'sldi.'; % alias for rlwinm.
-	      'srw'  -> 'srdi.'; % alias for rlwinm.
-	      'sraw' -> 'sradi.'
-	    end,
-	  [hipe_ppc:mk_alu(AluOpIDot, Dst, Src1,
-			   hipe_ppc:mk_uimm16(Src2))];
-	 true ->
-	  AluOpDot =
-	    case AluOp of
-	      'slw'  -> 'sld.';
-	      'srw'  -> 'srd.';
-	      'sraw' -> 'srad.'
-	    end,
-	  mk_alub_ri_Rc_rr(Dst, Src1, AluOpDot, Src2)
-      end
+  {AluOpIDot, MaxIShift} =
+    case AluOp of
+      'slw'  -> {'slwi.', 32}; % alias for rlwinm.
+      'srw'  -> {'srwi.', 32}; % alias for rlwinm.
+      'sraw' -> {'srawi.', 32};
+      'sld'  -> {'sldi.', 64};
+      'srd'  -> {'srdi.', 64};
+      'srad' -> {'sradi.', 64}
+    end,
+  if Src2 < MaxIShift, Src2 >= 0 ->
+      [hipe_ppc:mk_alu(AluOpIDot, Dst, Src1,
+		       hipe_ppc:mk_uimm16(Src2))];
+     true ->
+      AluOpDot =
+	case AluOp of
+	  'slw'  -> 'slw.';
+	  'srw'  -> 'srw.';
+	  'sraw' -> 'sraw.';
+	  'sld'  -> 'sld.';
+	  'srd'  -> 'srd.';
+	  'srad' -> 'srad.'
+	end,
+      mk_alub_ri_Rc_rr(Dst, Src1, AluOpDot, Src2)
   end.
 
 mk_alub_ri_Rc_rr(Dst, Src1, AluOp, Src2) ->
