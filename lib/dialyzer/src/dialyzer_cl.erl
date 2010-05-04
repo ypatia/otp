@@ -71,7 +71,7 @@ build_plt(Opts) ->
   Files = get_files_from_opts(Opts1),
   Md5 = dialyzer_plt:compute_md5_from_files(Files),
   PltInfo = {Md5, dict:new()},
-  do_analysis(Files, Opts1, dialyzer_plt:new(), PltInfo).
+  do_analysis(Files, Opts1, dialyzer_plt:new(), PltInfo, []).
 
 init_opts_for_build(Opts) ->
   case Opts#options.output_plt =:= none of
@@ -164,7 +164,7 @@ plt_common(Opts, RemoveFiles, AddFiles) ->
     {old_version, Md5} ->
       PltInfo = {Md5, dict:new()},
       Files = [F || {F, _} <- Md5],
-      do_analysis(Files, Opts, dialyzer_plt:new(), PltInfo);
+      do_analysis(Files, Opts, dialyzer_plt:new(), PltInfo, []);
     {differ, Md5, DiffMd5, ModDeps} ->
       report_failed_plt_check(Opts, DiffMd5),
       {AnalFiles, RemovedMods, ModDeps1} = 
@@ -177,7 +177,8 @@ plt_common(Opts, RemoveFiles, AddFiles) ->
 			       {Md5, ModDeps}),
 	  {?RET_NOTHING_SUSPICIOUS, []};
 	false ->
-	  do_analysis(AnalFiles, Opts, Plt, {Md5, ModDeps1})
+	  DiffMods = [Mod||{differ,Mod} <- DiffMd5],
+	  do_analysis(AnalFiles, Opts, Plt, {Md5, ModDeps1}, DiffMods)
       end;
     {error, no_such_file} ->
       Msg = io_lib:format("Could not find the PLT: ~s\n~s",
@@ -323,11 +324,11 @@ get_default_plt() ->
 do_analysis(Options) ->
   Files = get_files_from_opts(Options),
   case Options#options.init_plt of
-    none -> do_analysis(Files, Options, dialyzer_plt:new(), none);
-    File -> do_analysis(Files, Options, dialyzer_plt:from_file(File), none)
+    none -> do_analysis(Files, Options, dialyzer_plt:new(), none, []);
+    File -> do_analysis(Files, Options, dialyzer_plt:from_file(File), none, [])
   end.
   
-do_analysis(Files, Options, Plt, PltInfo) ->
+do_analysis(Files, Options, Plt, PltInfo, DiffMods) ->
   assert_writable(Options#options.output_plt),
   hipe_compile(Files, Options),
   report_analysis_start(Options),
@@ -347,7 +348,8 @@ do_analysis(Files, Options, Plt, PltInfo) ->
 			   start_from = Options#options.from, 
 			   plt = Plt,
 			   use_contracts = Options#options.use_contracts,
-			   callgraph_file = Options#options.callgraph_file},
+			   callgraph_file = Options#options.callgraph_file,
+			   diff_mods = DiffMods},
   State3 = start_analysis(State2, InitAnalysis),
   {T1, _} = statistics(wall_clock),
   Return = cl_loop(State3),

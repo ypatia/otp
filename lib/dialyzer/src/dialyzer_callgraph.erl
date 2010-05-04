@@ -57,7 +57,7 @@
          get_race_code/1, get_race_detection/1, race_code_new/1,
          put_digraph/2, put_race_code/2, put_race_detection/2,
          put_named_tables/2, put_public_tables/2, put_behaviour_api_calls/2,
-	 get_behaviour_api_calls/1]).
+	 get_behaviour_api_calls/1, put_diff_mods/2]).
 
 -include("dialyzer.hrl").
 
@@ -100,7 +100,8 @@
                     public_tables  = []            :: [label()],
                     named_tables   = []            :: [string()],
                     race_detection = false         :: boolean(),
-		    beh_api_calls  = []            :: [{mfa(), mfa()}]}).
+		    beh_api_calls  = []            :: [{mfa(), mfa()}],
+		    diff_mods      = []            :: [_]}).
 
 %% Exported Types
 
@@ -301,14 +302,14 @@ create_module_digraph([], MDG) ->
 
 -spec finalize(callgraph()) -> callgraph().
 
-finalize(#callgraph{digraph = DG} = CG) ->
-  CG#callgraph{postorder = digraph_finalize(DG)}.
+finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
+  CG#callgraph{postorder = digraph_finalize(DG, DiffMods)}.
 
 -spec reset_from_funs([mfa_or_funlbl()], callgraph()) -> callgraph().
 
-reset_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
+reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
-  Postorder = digraph_finalize(SubGraph),
+  Postorder = digraph_finalize(SubGraph, DiffMods),
   digraph_delete(SubGraph),
   CG#callgraph{postorder = Postorder}.
 
@@ -540,7 +541,7 @@ digraph_in_neighbours(V, DG) ->
 %% considered to belong to all modules to make sure that we do not
 %% lose any nodes.
 
-digraph_postorder(Digraph) ->
+digraph_postorder(Digraph, DiffMods) ->
   %% Remove all self-edges for SCCs.
   Edges = [digraph:edge(Digraph, E) || E <- digraph:edges(Digraph)],
   SelfEdges = [E || {E, V, V, _} <- Edges],
@@ -550,32 +551,38 @@ digraph_postorder(Digraph) ->
   case Leaves =:= [] of
     true -> [];
     false ->
-      {Module, Taken} = take_sccs_from_fresh_module(Leaves),
+      {Module, Taken} = take_sccs_from_fresh_module(Leaves, DiffMods),
       true = digraph:del_vertices(Digraph, Taken),
-      digraph_postorder(Digraph, Module, [Taken])
+      digraph_postorder(Digraph, Module, [Taken], DiffMods)
   end.
 
-digraph_postorder(Digraph, LastModule, Acc) ->
+digraph_postorder(Digraph, LastModule, Acc, DiffMods) ->
   Leaves = digraph_leaves(Digraph),
   case Leaves =:= [] of
     true -> lists:append(lists:reverse(Acc));
     false ->
       case [SCC || SCC <- Leaves, scc_belongs_to_module(SCC, LastModule)] of
 	[] ->
-	  {NewModule, NewTaken} = take_sccs_from_fresh_module(Leaves),
+	  {NewModule, NewTaken} = take_sccs_from_fresh_module(Leaves, DiffMods),
 	  true = digraph:del_vertices(Digraph, NewTaken),
-	  digraph_postorder(Digraph, NewModule, [NewTaken|Acc]);
+	  digraph_postorder(Digraph, NewModule, [NewTaken|Acc], DiffMods);
 	NewTaken ->
 	  true = digraph:del_vertices(Digraph, NewTaken),
-	  digraph_postorder(Digraph, LastModule, [NewTaken|Acc])
+	  digraph_postorder(Digraph, LastModule, [NewTaken|Acc], DiffMods)
       end
   end.
 
 digraph_leaves(Digraph) ->
   [V || V <- digraph:vertices(Digraph), digraph:out_degree(Digraph, V) =:= 0].
 
-take_sccs_from_fresh_module(Leaves) ->
-  NewModule = find_module(hd(Leaves)),
+take_sccs_from_fresh_module(Leaves, DiffMods) ->
+  FlatLeaves = lists:append(Leaves),
+  Query = [M || {M,_,_} <- FlatLeaves, lists:member(M, DiffMods)],
+  NewModule =
+    case Query of
+      []     -> find_module(hd(Leaves));
+      [H|_T] -> H
+    end,
   {NewModule, 
    [SCC || SCC <- Leaves, scc_belongs_to_module(SCC, NewModule)]}.
 
@@ -595,9 +602,9 @@ scc_belongs_to_module([], _Module) ->
 find_module([{M, _, _}|_]) -> M;
 find_module([Label|Left]) when is_integer(Label) -> find_module(Left).
 
-digraph_finalize(DG) ->
+digraph_finalize(DG, DiffMods) ->
   DG1 = digraph_utils:condensation(DG),
-  Postorder = digraph_postorder(DG1),
+  Postorder = digraph_postorder(DG1, DiffMods),
   digraph:delete(DG1),
   Postorder.
 
@@ -717,3 +724,10 @@ put_behaviour_api_calls(Calls, Callgraph) ->
 
 get_behaviour_api_calls(Callgraph) ->
   Callgraph#callgraph.beh_api_calls.
+
+%-------------------------------------------------------------------------------
+
+-spec put_diff_mods([_], callgraph()) -> callgraph().
+
+put_diff_mods(DiffMods, Callgraph) ->
+  Callgraph#callgraph{diff_mods = DiffMods}.

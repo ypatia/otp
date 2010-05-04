@@ -121,7 +121,8 @@
 		   use_contracts  = true           :: boolean(),
 		   race_detection = false	   :: boolean(),
 		   behaviours_chk = false          :: boolean(),
-		   callgraph_file = ""             :: file:filename()}).
+		   callgraph_file = ""             :: file:filename(),
+		   diff_mods      = []             :: [_]}).
 
 -record(options, {files           = []		   :: [file:filename()],
 		  files_rec       = []		   :: [file:filename()],
