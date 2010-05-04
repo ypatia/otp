@@ -354,7 +354,7 @@ need_analysis([SCC], Callgraph) ->
 
 -spec unchanged(_, callgraph()) -> callgraph().
 
-unchanged([SCC], Callgraph) ->
+unchanged([SCC|Rest], Callgraph) ->
   FunDependents = Callgraph#callgraph.is_dependent,
   FunDependsOn = Callgraph#callgraph.depends_on,
   Dependents = case dict:find(SCC,FunDependents) of
@@ -364,7 +364,10 @@ unchanged([SCC], Callgraph) ->
   RemoveFromListFun = fun(L) -> L -- [SCC] end,
   DictUpdateFun = fun(V,Dict) -> dict:update(V, RemoveFromListFun, Dict) end,
   NewFunDependsOn = lists:foldl(DictUpdateFun,FunDependsOn,Dependents),
-  Callgraph#callgraph{depends_on = NewFunDependsOn}.
+  unchanged(Rest,Callgraph#callgraph{depends_on = NewFunDependsOn});
+unchanged([], Callgraph) ->
+  Callgraph.
+
 %%----------------------------------------------------------------------
 %% Core code
 %%----------------------------------------------------------------------
