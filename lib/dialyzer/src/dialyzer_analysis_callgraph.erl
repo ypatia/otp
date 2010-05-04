@@ -42,6 +42,7 @@
 	  no_warn_unused                :: set(),
 	  parent                        :: pid(),
 	  plt                           :: dialyzer_plt:plt(),
+	  old_plt                       :: dialyzer_plt:plt(),
 	  start_from     = byte_code    :: start_from(),
 	  use_contracts  = true         :: boolean(),
 	  behaviours = {false,[]}   :: {boolean(),[atom()]}
@@ -141,7 +142,7 @@ analysis_start(Parent, Analysis) ->
       throw:{error, _ErrorMsg} = Error -> exit(Error)
     end,
   NewPlt = dialyzer_plt:insert_types(Plt, dialyzer_codeserver:get_records(NewCServer)),
-  State0 = State#analysis_state{plt = NewPlt},
+  State0 = State#analysis_state{plt = NewPlt, old_plt = NewPlt},
   dump_callgraph(Callgraph, State0, Analysis),
   State1 = State0#analysis_state{codeserver = NewCServer},
   State2 = State1#analysis_state{no_warn_unused = NoWarn},
@@ -169,7 +170,8 @@ analyze_callgraph(Callgraph, State) ->
   case State#analysis_state.analysis_type of
     plt_build ->
       Callgraph1 = dialyzer_callgraph:finalize(Callgraph),
-      NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph1, Plt, 
+      OldPlt = State#analysis_state.old_plt,
+      NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph1, Plt, OldPlt,
 						       Codeserver, Parent),
       dialyzer_callgraph:delete(Callgraph1),
       State#analysis_state{plt = NewPlt};

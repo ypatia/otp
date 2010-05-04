@@ -28,7 +28,7 @@
 -module(dialyzer_succ_typings).
 
 -export([analyze_callgraph/3, 
-	 analyze_callgraph/4,
+	 analyze_callgraph/5,
 	 get_warnings/7]).
 
 %% These are only intended as debug functions.
@@ -59,6 +59,7 @@
 	     codeserver     :: dialyzer_codeserver:codeserver(),
 	     no_warn_unused :: set(),
 	     parent = none  :: parent(),
+	     old_plt        :: dialyzer_plt:plt(),
 	     plt            :: dialyzer_plt:plt()}).
 
 %%--------------------------------------------------------------------
@@ -68,14 +69,16 @@
 	 dialyzer_plt:plt().
 
 analyze_callgraph(Callgraph, Plt, Codeserver) ->
-  analyze_callgraph(Callgraph, Plt, Codeserver, none).
+  EmptyPlt = dialyzer_plt:new(),
+  analyze_callgraph(Callgraph, Plt, EmptyPlt, Codeserver, none).
 
 -spec analyze_callgraph(dialyzer_callgraph:callgraph(), dialyzer_plt:plt(),
-			dialyzer_codeserver:codeserver(), parent()) ->
+			dialyzer_plt:plt(), dialyzer_codeserver:codeserver(),
+			parent()) ->
          dialyzer_plt:plt().
 
-analyze_callgraph(Callgraph, Plt, Codeserver, Parent) ->
-  State = #st{callgraph = Callgraph, plt = Plt, 
+analyze_callgraph(Callgraph, Plt, OldPlt, Codeserver, Parent) ->
+  State = #st{callgraph = Callgraph, plt = Plt, old_plt = OldPlt,
 	      codeserver = Codeserver, parent = Parent},
   NewState = get_refined_success_typings(State),
   NewState#st.plt.
