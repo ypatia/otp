@@ -44,6 +44,14 @@
 -define(debug(X__, Y__), ok).
 -endif.
 
+%-define(LOCAL_DEBUG,true).
+
+-ifdef(LOCAL_DEBUG).
+-define(ldebug(X__, Y__), io:format(X__, Y__)).
+-else.
+-define(ldebug(X__, Y__), ok).
+-endif.
+
 -define(TYPE_LIMIT, 4).
 
 %%--------------------------------------------------------------------
@@ -191,7 +199,6 @@ refine_one_module(M, State) ->
       State1 = st__renew_state_calls(NewCallgraph, State),
       {State1, ordsets:new()};
     {false, NotFixpoint} ->
-      ?debug("Not fixpoint\n", []),
       NewState = insert_into_plt(dict:from_list(NotFixpoint), State),
       NewState1 = st__renew_state_calls(NewCallgraph, NewState),
       {NewState1, ordsets:from_list([FunLbl || {FunLbl,_Type} <- NotFixpoint])}
@@ -260,10 +267,7 @@ compare_types_1([{X, Type1}|Left1], [{X, Type2}|Left2], Strict, NotFixpoint) ->
 	end,
   case Res of
     true -> compare_types_1(Left1, Left2, Strict, NotFixpoint);
-    false -> 
-      ?debug("Failed fixpoint for ~w: ~s =/= ~s\n",
-	     [X, erl_types:t_to_string(Type1), erl_types:t_to_string(Type2)]),
-      compare_types_1(Left1, Left2, Strict, [{X, Type2}|NotFixpoint])
+    false -> compare_types_1(Left1, Left2, Strict, [{X, Type2}|NotFixpoint])
   end;
 compare_types_1([_|Left1], List2, Strict, NotFixpoint) ->
   %% If the function was not called.
@@ -291,12 +295,18 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent} = State,
     none ->
       ?debug("==================== Typesig done ====================\n\n", []),
       case NotFixpoint =:= [] of
-	true -> {fixpoint, State};
-	false -> {not_fixpoint, NotFixpoint, State}
+	true -> ?ldebug("\nTypesig Fixpoint\n",[]), {fixpoint, State};
+	false -> ?ldebug("\nTypesig Fixpoint\n",[]), {not_fixpoint, NotFixpoint, State}
       end
   end.
 
-analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
+analyze_scc(SCC, #st{codeserver = Codeserver,
+		     callgraph= Callgraph} = State) ->
+  ?ldebug("\n~p:\n",[SCC]),
+  case dialyzer_callgraph:need_analysis(SCC, Callgraph) of
+    true -> ?ldebug("Need analysis...",[]);
+    false -> ?ldebug("Doesn't need analysis...",[])
+  end,
   SCC_Info = [{MFA, 
 	       dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
 	       dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
@@ -305,11 +315,18 @@ analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
 		|| {_, _, _} = MFA <- SCC],
   Contracts2 = [{MFA, Contract} || {MFA, {ok, Contract}} <- Contracts1],
   Contracts3 = orddict:from_list(Contracts2),
-  {SuccTypes, PltContracts, NotFixpoint} = 
+  {SuccTypes, PltContracts, NotFixpoint, AllFuns} = 
     find_succ_types_for_scc(SCC_Info, Contracts3, State),
+  NewCallgraph =
+    case differ_from_old_plt(AllFuns, State, SuccTypes) of
+      true  -> ?ldebug("Changed\n",[]),
+	       Callgraph;
+      false -> ?ldebug("Unchanged\n",[]),
+	       dialyzer_callgraph:unchanged(SCC, Callgraph)
+  end,
   State1 = insert_into_plt(SuccTypes, State),
   ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
-  {State1#st{plt = ContrPlt}, NotFixpoint}.
+  {State1#st{plt = ContrPlt, callgraph = NewCallgraph}, NotFixpoint}.
 
 find_succ_types_for_scc(SCC_Info, Contracts, 
 			#st{codeserver = Codeserver, 
@@ -340,12 +357,19 @@ find_succ_types_for_scc(SCC_Info, Contracts,
   case (ContractFixpoint andalso 
 	reached_fixpoint_strict(PropTypes, FilteredFunTypes)) of
     true ->
-      {FilteredFunTypes, PltContracts, []};
+      {FilteredFunTypes, PltContracts, [], AllFuns};
     false ->
-      ?debug("Not fixpoint for: ~w\n", [AllFuns]),
       {FilteredFunTypes, PltContracts,
-       ordsets:from_list([Fun || {Fun, _Arity} <- AllFuns])}
+       ordsets:from_list([Fun || {Fun, _Arity} <- AllFuns]), AllFuns}
   end.
+
+differ_from_old_plt(AllFuns, State, NewTypes) ->
+  OldTypes = get_fun_types_from_old_plt(AllFuns, State),
+  not reached_fixpoint_strict(OldTypes, NewTypes).
+
+get_fun_types_from_old_plt(FunList, State) ->
+  OldPlt = State#st.old_plt,
+  get_fun_types_from_plt(FunList, State#st{plt = OldPlt}).
 
 get_fun_types_from_plt(FunList, State) ->
   get_fun_types_from_plt(FunList, State, dict:new()).

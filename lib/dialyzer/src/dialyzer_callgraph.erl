@@ -42,6 +42,7 @@
 	 module_deps/1,
 	 %% module_postorder/1,
 	 module_postorder_from_funs/2,
+	 need_analysis/2,
 	 new/0,
 	 in_neighbours/2,
 	 renew_race_info/4,
@@ -51,7 +52,9 @@
 	 take_scc/1,
 	 remove_external/1,
 	 to_dot/2,
-	 to_ps/3]).
+	 to_ps/3,
+	 unchanged/2
+	]).
 
 -export([cleanup/1, get_digraph/1, get_named_tables/1, get_public_tables/1,
          get_race_code/1, get_race_detection/1, race_code_new/1,
@@ -101,7 +104,11 @@
                     named_tables   = []            :: [string()],
                     race_detection = false         :: boolean(),
 		    beh_api_calls  = []            :: [{mfa(), mfa()}],
-		    diff_mods      = []            :: [_]}).
+		    diff_mods      = []            :: [_],
+		    depends_on     = dict:new()    :: dict(),
+		    is_dependent   = dict:new()    :: dict(),
+		    changed_funs   = dict:new()    :: dict()
+		   }).
 
 %% Exported Types
 
@@ -303,15 +310,24 @@ create_module_digraph([], MDG) ->
 -spec finalize(callgraph()) -> callgraph().
 
 finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
-  CG#callgraph{postorder = digraph_finalize(DG, DiffMods)}.
+  PostOrder = digraph_finalize(DG, DiffMods),
+  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG, DiffMods),
+  CG#callgraph{postorder    = PostOrder,
+	       depends_on   = FunDependsOn,
+	       is_dependent = FunDependents,
+	       changed_funs = ChangedFuns}.
 
 -spec reset_from_funs([mfa_or_funlbl()], callgraph()) -> callgraph().
 
 reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
-  Postorder = digraph_finalize(SubGraph, DiffMods),
+  PostOrder = digraph_finalize(SubGraph, DiffMods),
   digraph_delete(SubGraph),
-  CG#callgraph{postorder = Postorder}.
+  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG, DiffMods),
+  CG#callgraph{postorder    = PostOrder,
+	       depends_on   = FunDependsOn,
+	       is_dependent = FunDependents,
+	       changed_funs = ChangedFuns}.
 
 -spec module_postorder_from_funs([mfa_or_funlbl()], callgraph()) -> [[module()]].
 
@@ -320,7 +336,35 @@ module_postorder_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
   PO = module_postorder(CG#callgraph{digraph = SubGraph}),
   digraph_delete(SubGraph),
   PO.
-  
+
+-spec need_analysis(_, callgraph()) -> boolean().
+
+need_analysis([SCC], Callgraph) ->
+  ChangedFuns = Callgraph#callgraph.changed_funs,
+  case dict:find(SCC, ChangedFuns) of
+    {ok, changed} -> true;
+    error ->
+      FunDependsOn = Callgraph#callgraph.depends_on,
+      case dict:find(SCC,FunDependsOn) of
+	error -> true;
+	{ok, V1} -> V1 =/= []
+      end;
+    changed   -> true
+  end.
+
+-spec unchanged(_, callgraph()) -> callgraph().
+
+unchanged([SCC], Callgraph) ->
+  FunDependents = Callgraph#callgraph.is_dependent,
+  FunDependsOn = Callgraph#callgraph.depends_on,
+  Dependents = case dict:find(SCC,FunDependents) of
+		 error -> [];
+		 {ok,Value} -> Value
+	       end,
+  RemoveFromListFun = fun(L) -> L -- [SCC] end,
+  DictUpdateFun = fun(V,Dict) -> dict:update(V, RemoveFromListFun, Dict) end,
+  NewFunDependsOn = lists:foldl(DictUpdateFun,FunDependsOn,Dependents),
+  Callgraph#callgraph{depends_on = NewFunDependsOn}.
 %%----------------------------------------------------------------------
 %% Core code
 %%----------------------------------------------------------------------
@@ -607,6 +651,17 @@ digraph_finalize(DG, DiffMods) ->
   Postorder = digraph_postorder(DG1, DiffMods),
   digraph:delete(DG1),
   Postorder.
+
+dependencies(DG, DiffMods) ->
+  V = digraph:vertices(DG),
+  DictStoreFun = fun({Key,Value},Dict) -> dict:store(Key,Value,Dict) end,
+  DependsOnList  = [{V1, digraph:out_neighbours(DG, V1)} || V1 <- V],
+  DependentsList = [{V1, digraph:in_neighbours(DG, V1)}  || V1 <- V],
+  FunDependsOn = lists:foldl(DictStoreFun,dict:new(),DependsOnList),
+  FunDependents = lists:foldl(DictStoreFun,dict:new(),DependentsList),
+  DiffV = [{V1,changed} || {M,_,_} = V1 <- V, lists:member(M,DiffMods)],
+  ChangedFuns = lists:foldl(DictStoreFun,dict:new(),DiffV),
+  {ChangedFuns, FunDependsOn, FunDependents}.
 
 digraph_reaching_subgraph(Funs, DG) ->  
   Vertices = digraph_utils:reaching(Funs, DG),
