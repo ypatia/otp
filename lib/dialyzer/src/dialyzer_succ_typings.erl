@@ -303,52 +303,70 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent} = State,
 analyze_scc(SCC, #st{codeserver = Codeserver,
 		     callgraph= Callgraph} = State) ->
   ?ldebug("\n~p: ",[SCC]),
-  OldType = 
-    case SCC of
-      [_] -> get_old_succ_types(SCC, State#st.old_plt);
-      _   -> none
-    end,
-  case (OldType =:= none orelse dialyzer_callgraph:need_analysis(SCC, Callgraph)) of
-    false -> ?ldebug("Skipped",[]),
-	     NewCallgraph = dialyzer_callgraph:unchanged(SCC, Callgraph),
-	     PltContracts = get_old_plt_contracts(SCC, State#st.old_plt),
-	     [SCC1] = SCC,
-	     {value, Type} = OldType,
-	     Entry = [{SCC1, Type}],
-	     State1 = State#st{plt = dialyzer_plt:insert_list(State#st.plt, Entry)},
-	     ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
-	     {State1#st{plt = ContrPlt, callgraph = NewCallgraph}, []};
-    true -> ?ldebug("Analyzing... ",[]),
-	    SCC_Info = [{MFA,
-			 dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
-			 dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
-			|| {M, _, _} = MFA <- SCC],
-	    Contracts1 = [{MFA, dialyzer_codeserver:lookup_mfa_contract(MFA, Codeserver)}
-			  || {_, _, _} = MFA <- SCC],
-	    Contracts2 = [{MFA, Contract} || {MFA, {ok, Contract}} <- Contracts1],
-	    Contracts3 = orddict:from_list(Contracts2),
-	    {SuccTypes, PltContracts, NotFixpoint0, AllFuns} =
-	      find_succ_types_for_scc(SCC_Info, Contracts3, State),
-	    {NewCallgraph, NotFixpoint} =
-	      case differ_from_old_plt(AllFuns, State, SuccTypes) of
-		true  -> ?ldebug("changed",[]),
-			 {Callgraph, NotFixpoint0};
-		false -> ?ldebug("unchanged",[]),
-			 {dialyzer_callgraph:unchanged(SCC, Callgraph),[]}
-	      end,
-	    State1 = insert_into_plt(SuccTypes, State),
+  Result =
+    case dialyzer_callgraph:need_analysis(SCC, Callgraph) of
+      false -> 
+	OldTypes = get_old_succ_types(SCC, State#st.old_plt),
+	case OldTypes =:= none of
+	  false ->
+	    ?ldebug("Skipped",[]),
+	    NewCallgraph = dialyzer_callgraph:unchanged(SCC, Callgraph),
+	    PltContracts = get_old_plt_contracts(SCC, State#st.old_plt),
+	    State1 = State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
 	    ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
-	    {State1#st{plt = ContrPlt, callgraph = NewCallgraph}, NotFixpoint}
+	    {State1#st{plt = ContrPlt, callgraph = NewCallgraph}, []};
+	  true -> {not_ready,"Missing"}
+	end;
+      true -> {not_ready,"Dependencies"}
+    end,
+  case Result of
+    {not_ready,Msg} ->
+      ?ldebug("~s... ",[Msg]),
+      SCC_Info = [{MFA,
+		   dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
+		   dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
+		  || {M, _, _} = MFA <- SCC],
+      Contracts1 = [{MFA, dialyzer_codeserver:lookup_mfa_contract(MFA, Codeserver)}
+		    || {_, _, _} = MFA <- SCC],
+      Contracts2 = [{MFA, Contract} || {MFA, {ok, Contract}} <- Contracts1],
+      Contracts3 = orddict:from_list(Contracts2),
+      {SuccTypes2, PltContracts2, NotFixpoint2, AllFuns} =
+	find_succ_types_for_scc(SCC_Info, Contracts3, State),
+      {NewCallgraph2, NotFixpoint} =
+	case differ_from_old_plt(AllFuns, State, SuccTypes2) of
+	  true  -> ?ldebug("changed",[]),
+		   {Callgraph, NotFixpoint2};
+	  false -> ?ldebug("unchanged",[]),
+		   {dialyzer_callgraph:unchanged(SCC, Callgraph),[]}
+	end,
+      State2 = insert_into_plt(SuccTypes2, State),
+      ContrPlt2 = dialyzer_plt:insert_contract_list(State2#st.plt, PltContracts2),
+      {State2#st{plt = ContrPlt2, callgraph = NewCallgraph2}, NotFixpoint};
+    _ -> Result
   end.
 
-get_old_succ_types([SCC], Plt) ->
-  dialyzer_plt:lookup(Plt, SCC).
+get_old_succ_types(SCC, Plt) ->
+  get_old_succ_types(SCC, Plt, []).
+get_old_succ_types([SCC|Rest], Plt, Acc) ->
+  case dialyzer_plt:lookup(Plt, SCC) of
+    none -> none;
+    {value, {_RetT, _ArgT} = Type} ->
+      get_old_succ_types(Rest, Plt, [{SCC, Type}|Acc])
+  end;
+get_old_succ_types([], _Plt, Acc) ->
+  Acc.
 
-get_old_plt_contracts([SCC], Plt) ->
+get_old_plt_contracts(SCC, Plt) ->
+  get_old_plt_contracts(SCC, Plt, []).
+get_old_plt_contracts([SCC|Rest], Plt, Acc) ->
   case dialyzer_plt:lookup_contract(Plt, SCC) of
-    {value, Contract} -> [{SCC, Contract}];
-    none              -> []
-  end.
+    {value, Contract} ->
+      get_old_plt_contracts(Rest, Plt, [{SCC, Contract}|Acc]);
+    none ->
+      get_old_plt_contracts(Rest, Plt, Acc)
+  end;
+get_old_plt_contracts([], _Plt, Acc) ->
+  Acc.
 
 find_succ_types_for_scc(SCC_Info, Contracts,
 			#st{codeserver = Codeserver,

@@ -339,7 +339,7 @@ module_postorder_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
 
 -spec need_analysis(_, callgraph()) -> boolean().
 
-need_analysis([SCC], Callgraph) ->
+need_analysis([SCC|Rest], Callgraph) ->
   ChangedFuns = Callgraph#callgraph.changed_funs,
   case dict:find(SCC, ChangedFuns) of
     {ok, changed} -> true;
@@ -347,10 +347,16 @@ need_analysis([SCC], Callgraph) ->
       FunDependsOn = Callgraph#callgraph.depends_on,
       case dict:find(SCC,FunDependsOn) of
 	error -> true;
-	{ok, V1} -> V1 =/= []
+	{ok, V1} -> 
+	  case V1 =/= [] of
+	    true  -> true;
+	    false -> need_analysis(Rest, Callgraph)
+	  end
       end;
     changed   -> true
-  end.
+  end;
+need_analysis([], _Callgraph) ->
+  false.
 
 -spec unchanged(_, callgraph()) -> callgraph().
 
