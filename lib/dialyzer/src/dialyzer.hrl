@@ -122,7 +122,9 @@
 		   race_detection = false	   :: boolean(),
 		   behaviours_chk = false          :: boolean(),
 		   callgraph_file = ""             :: file:filename(),
-		   diff_mods      = []             :: [_]}).
+		   diff_mods      = []             :: [_],
+		   fast_plt       = false          :: boolean()
+		  }).
 
 -record(options, {files           = []		   :: [file:filename()],
 		  files_rec       = []		   :: [file:filename()],
@@ -140,7 +142,8 @@
 		  output_file     = none	   :: 'none' | file:filename(),
 		  output_format   = formatted      :: 'raw' | 'formatted',
 		  callgraph_file  = ""             :: file:filename(),
-		  check_plt       = true           :: boolean()
+		  check_plt       = true           :: boolean(),
+		  fast_plt        = false          :: boolean()
 		 }).
 
 -record(contract, {contracts	  = []		   :: [contract_pair()],

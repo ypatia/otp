@@ -135,6 +135,8 @@ build_options([{OptionName, Value} = Term|Rest], Options) ->
       build_options(Rest, NewOptions);
     check_plt when is_boolean(Value) ->
       build_options(Rest, Options#options{check_plt = Value});
+    fast_plt when is_boolean(Value) ->
+      build_options(Rest, Options#options{fast_plt = Value});
     defines ->
       assert_defines(Term, Value),
       OldVal = Options#options.defines,

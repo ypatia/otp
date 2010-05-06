@@ -68,6 +68,9 @@ cl(["-n"|T]) ->
 cl(["--no_check_plt"|T]) ->
   put(dialyzer_options_check_plt, false),
   cl(T);
+cl(["--fast_plt"|T]) ->
+  put(dialyzer_options_fast_plt, true),
+  cl(T);
 cl(["-nn"|T]) ->
   cl(["--no_native"|T]);
 cl(["--no_native"|T]) ->
@@ -236,6 +239,7 @@ init() ->
   put(dialyzer_options_files,     DefaultOpts#options.files),
   put(dialyzer_output_format,     formatted),
   put(dialyzer_options_check_plt, DefaultOpts#options.check_plt),
+  put(dialyzer_options_fast_plt, DefaultOpts#options.fast_plt),
   ok.
 
 append_defines([Def, Val]) ->
@@ -287,7 +291,8 @@ common_options() ->
    {report_mode, get(dialyzer_options_report_mode)},
    {use_spec, get(dialyzer_options_use_contracts)},
    {warnings, get(dialyzer_warnings)},
-   {check_plt, get(dialyzer_options_check_plt)}].
+   {check_plt, get(dialyzer_options_check_plt)},
+   {fast_plt, get(dialyzer_options_fast_plt)}].
 
 %%-----------------------------------------------------------------------
 
@@ -390,6 +395,8 @@ Options:
   --check_plt
       Checks the plt for consistency and rebuilds it if it is not up-to-date.
       Actually, this option is of rare use as it is on by default.
+  --fast_plt
+      Speeds up the checking of the plt.
   --no_check_plt (or -n)
       Skip the plt check when running Dialyzer. Useful when working with
       installed plts that never change.

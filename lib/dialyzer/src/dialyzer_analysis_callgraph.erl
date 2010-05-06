@@ -46,7 +46,8 @@
 	  start_from     = byte_code    :: start_from(),
 	  use_contracts  = true         :: boolean(),
 	  behaviours = {false,[]}       :: {boolean(),[atom()]},
-	  diff_mods = []                :: [_]
+	  diff_mods = []                :: [_],
+	  fast_plt = false              :: boolean()
 	 }).
 
 -record(server_state, {parent :: pid(), legal_warnings :: [dial_warn_tag()]}).
@@ -126,7 +127,8 @@ analysis_start(Parent, Analysis) ->
 			  start_from = Analysis#analysis.start_from,
 			  use_contracts = Analysis#analysis.use_contracts,
 			  behaviours = {Analysis#analysis.behaviours_chk,[]},
-			  diff_mods = Analysis#analysis.diff_mods
+			  diff_mods = Analysis#analysis.diff_mods,
+			  fast_plt = Analysis#analysis.fast_plt
 			 },
   Files = ordsets:from_list(Analysis#analysis.files),
   {Callgraph, NoWarn, TmpCServer0} = compile_and_store(Files, State),
@@ -173,7 +175,8 @@ analyze_callgraph(Callgraph, State) ->
       OldPlt = State#analysis_state.old_plt,
       DiffMods = State#analysis_state.diff_mods,
       Callgraph0 = dialyzer_callgraph:put_diff_mods(DiffMods, Callgraph),
-      Callgraph1 = dialyzer_callgraph:put_fast_plt(true, Callgraph0),
+      Callgraph1 = dialyzer_callgraph:put_fast_plt(State#analysis_state.fast_plt, 
+						   Callgraph0),
       Callgraph2 = dialyzer_callgraph:finalize(Callgraph1),
       NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph2, Plt, OldPlt,
 						       Codeserver, Parent),
