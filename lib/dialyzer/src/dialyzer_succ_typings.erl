@@ -308,6 +308,21 @@ analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
   ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
   {State1#st{plt = ContrPlt}, NotFixpoint}.
 
+plain_analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
+  SCC_Info = [{MFA, 
+	       dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
+	       dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
+	      || {M, _, _} = MFA <- SCC],
+  Contracts1 = [{MFA, dialyzer_codeserver:lookup_mfa_contract(MFA, Codeserver)}
+		|| {_, _, _} = MFA <- SCC],
+  Contracts2 = [{MFA, Contract} || {MFA, {ok, Contract}} <- Contracts1],
+  Contracts3 = orddict:from_list(Contracts2),
+  {SuccTypes, PltContracts, NotFixpoint} = 
+    find_succ_types_for_scc(SCC_Info, Contracts3, State),
+  State1 = insert_into_plt(SuccTypes, State),
+  ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
+  {State1#st{plt = ContrPlt}, NotFixpoint}.
+
 find_succ_types_for_scc(SCC_Info, Contracts, 
 			#st{codeserver = Codeserver, 
 			    callgraph = Callgraph, plt = Plt} = State) ->

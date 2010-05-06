@@ -304,11 +304,20 @@ create_module_digraph([], MDG) ->
 finalize(#callgraph{digraph = DG} = CG) ->
   CG#callgraph{postorder = digraph_finalize(DG)}.
 
+plain_finalize(#callgraph{digraph = DG} = CG) ->
+  CG#callgraph{postorder = plain_digraph_finalize(DG)}.
+
 -spec reset_from_funs([mfa_or_funlbl()], callgraph()) -> callgraph().
 
 reset_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
   Postorder = digraph_finalize(SubGraph),
+  digraph_delete(SubGraph),
+  CG#callgraph{postorder = Postorder}.
+
+plain_reset_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
+  SubGraph = digraph_reaching_subgraph(Funs, DG),
+  Postorder = plain_digraph_finalize(SubGraph),
   digraph_delete(SubGraph),
   CG#callgraph{postorder = Postorder}.
 
@@ -596,6 +605,12 @@ find_module([{M, _, _}|_]) -> M;
 find_module([Label|Left]) when is_integer(Label) -> find_module(Left).
 
 digraph_finalize(DG) ->
+  DG1 = digraph_utils:condensation(DG),
+  Postorder = digraph_postorder(DG1),
+  digraph:delete(DG1),
+  Postorder.
+
+plain_digraph_finalize(DG) ->
   DG1 = digraph_utils:condensation(DG),
   Postorder = digraph_postorder(DG1),
   digraph:delete(DG1),
