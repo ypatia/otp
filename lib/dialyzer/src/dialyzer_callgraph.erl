@@ -770,14 +770,15 @@ dependencies(DG, DiffMods) ->
   DependentsDict = lists:foldl(fun dict_store/2, dict:new(), DependentsList),
   DiffF = [L || L <- F, {M,_,_} <- L, lists:member(M,DiffMods)],
   NeedF = needed_fixpoint(DiffF,DependsOnDict),
-  DiffFTagged = [{F1, differ} || F1 <- DiffF],
-  NeedFTagged = [{F1, needed} || F1 <- NeedF],
-  DifferFuns = lists:foldl(fun dict_store/2, dict:new(), DiffFTagged),
-  NeededFuns = lists:foldl(fun dict_store/2, DifferFuns, NeedFTagged),
+  DifferFuns = lists:foldl(dict_store_value(differ), dict:new(), DiffF),
+  NeededFuns = lists:foldl(dict_store_value(needed), DifferFuns, NeedF),
   {NeededFuns, DependsOnDict, DependentsDict}.
 
 dict_store({Key, Value}, Dict) ->
   dict:store(Key, Value, Dict).
+
+dict_store_value(Value) ->
+  fun (Key, Dict) -> dict:store(Key, Value, Dict) end.
 
 needed_fixpoint(DiffF, DependsOnDict) ->
   sets:to_list(needed_fixpoint(DiffF, DependsOnDict, sets:new())).
@@ -814,18 +815,9 @@ changed(SCC, Callgraph) ->
   ChangedFuns = Callgraph#callgraph.changed_funs,
   {ok, SCCDependents} = dict:find(SCC,DependentsDict),
   DepDependenciesFun = 
-    fun(V,L1) -> 
-	case dict:find(V, DependsOnDict) of
-	  error    -> L1;
-	  {ok, L2} -> [L2|L1]
-	end
-    end,
+    fun(V,L1) -> [dict:fetch(V, DependsOnDict)|L1] end,
   DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
-  DictStoreFun = 
-    fun(V,Dict) ->
-	dict:store(V, needed, Dict)
-    end,
-  NewChangedFuns = lists:foldl(DictStoreFun,ChangedFuns,DepDependencies),
+  NewChangedFuns = lists:foldl(dict_store_value(needed),ChangedFuns,DepDependencies),
   Callgraph#callgraph{changed_funs = NewChangedFuns}.
 
 %-------------------------------------------------------------------------------
