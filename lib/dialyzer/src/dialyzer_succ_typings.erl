@@ -44,7 +44,7 @@
 -define(debug(X__, Y__), ok).
 -endif.
 
-%-define(LOCAL_DEBUG,true).
+-define(LOCAL_DEBUG,true).
 
 -ifdef(LOCAL_DEBUG).
 -define(ldebug(X__, Y__), io:format(X__, Y__)).
@@ -295,11 +295,26 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent, fast_plt = Fast} =
       find_succ_typings(NewState, NewNotFixpoint2);
     none ->
       ?ldebug("\n==================== Typesig done ====================\n", []),
-      case NotFixpoint =:= [] of
+      case check_fixpoint(NotFixpoint, Callgraph, Fast) of
 	true  -> {fixpoint, State};
 	false -> {not_fixpoint, NotFixpoint, State}
       end
   end.
+
+check_fixpoint(Fixpoint, Callgraph, Fast) ->
+  case Fast of
+    false -> Fixpoint =:= [];
+    true  -> 
+      has_escaping(Fixpoint, Callgraph)
+  end.
+
+has_escaping([Label|Rest], Callgraph) ->
+  case dialyzer_callgraph:is_escaping(Label, Callgraph) of
+    true -> true;
+    false -> has_escaping(Rest, Callgraph)
+  end;
+has_escaping([], Callgraph) ->
+  false.
 
 analyze_scc(SCC, State, Fast) ->
   case Fast of
