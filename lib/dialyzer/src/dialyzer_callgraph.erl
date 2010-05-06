@@ -53,8 +53,7 @@
 	 take_scc/1,
 	 remove_external/1,
 	 to_dot/2,
-	 to_ps/3,
-	 unchanged/2
+	 to_ps/3
 	]).
 
 -export([cleanup/1, get_digraph/1, get_named_tables/1, get_public_tables/1,
@@ -319,8 +318,10 @@ create_module_digraph([], MDG) ->
 -spec finalize(callgraph()) -> callgraph().
 
 finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
-  PostOrder = digraph_finalize(DG, DiffMods),
-  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG, DiffMods),
+  DG1 = digraph_utils:condensation(DG),
+  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG1, DiffMods),
+  PostOrder = digraph_finalize(DG1, DiffMods),
+  digraph:delete(DG1),
   CG#callgraph{postorder    = PostOrder,
 	       depends_on   = FunDependsOn,
 	       is_dependent = FunDependents,
@@ -330,9 +331,11 @@ finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
 
 reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
-  PostOrder = digraph_finalize(SubGraph, DiffMods),
+  SG1 = digraph_utils:condensation(SubGraph),
+  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(SG1, DiffMods),
+  PostOrder = digraph_finalize(SG1, DiffMods),
+  digraph_delete(SG1),
   digraph_delete(SubGraph),
-  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG, DiffMods),
   CG#callgraph{postorder    = PostOrder,
 	       depends_on   = FunDependsOn,
 	       is_dependent = FunDependents,
@@ -345,89 +348,6 @@ module_postorder_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
   PO = module_postorder(CG#callgraph{digraph = SubGraph}),
   digraph_delete(SubGraph),
   PO.
-
--spec need_analysis(_, callgraph()) -> boolean().
-
-need_analysis([SCC|Rest], Callgraph) ->
-  ChangedFuns = Callgraph#callgraph.changed_funs,
-  FunDependsOn = Callgraph#callgraph.depends_on,
-  case dict:find(SCC, ChangedFuns) of
-    {ok, differ} -> 
-      ?ldebug("File differs",[]),
-      true;
-    {ok, needed} ->   
-      FunDependents = Callgraph#callgraph.is_dependent,
-      case dict:find(SCC, FunDependents) of
-	{ok, V2} -> ok
-      end,
-      ?ldebug("Needed by higher (~p)",[V2]),
-      true;
-    error ->
-      Stop =
-	case dict:find(SCC,FunDependsOn) of
-	  {ok, V1} -> 
-	    case V1 =/= [] of
-	      true -> 
-		case V1 =/= [SCC] of
-		  true -> 
-		    true;
-		  false -> 
-		    false
-		end;
-	      false -> 
-		false
-	    end
-	end,
-      case Stop of
-	true  -> ?ldebug("SKIP? Deps:~p",[V1]),
-		 true;
-	false -> need_analysis(Rest, Callgraph)
-      end
-  end;
-need_analysis([], _Callgraph) ->
-  false.
-
--spec unchanged(_, callgraph()) -> callgraph().
-
-unchanged([SCC|Rest], Callgraph) ->
-  FunDependents = Callgraph#callgraph.is_dependent,
-  FunDependsOn = Callgraph#callgraph.depends_on,
-  Dependents = case dict:find(SCC,FunDependents) of
-		 error -> [];
-		 {ok,Value} -> Value
-	       end,
-  RemoveFromListFun = fun(L) -> L -- [SCC] end,
-  DictUpdateFun = fun(V,Dict) -> dict:update(V, RemoveFromListFun, Dict) end,
-  NewFunDependsOn = lists:foldl(DictUpdateFun,FunDependsOn,Dependents),
-  unchanged(Rest,Callgraph#callgraph{depends_on = NewFunDependsOn});
-unchanged([], Callgraph) ->
-  Callgraph.
-
--spec changed(_, callgraph()) -> callgraph().
-
-changed([SCC|Rest], Callgraph) ->
-  FunDependents = Callgraph#callgraph.is_dependent,
-  FunDependsOn = Callgraph#callgraph.depends_on,
-  ChangedFuns = Callgraph#callgraph.changed_funs,
-  SCCDependents = case dict:find(SCC,FunDependents) of
-		    error -> [];
-		    {ok,Value} -> Value
-		  end,
-  DepDependenciesFun = fun(V,L1) -> 
-			   case dict:find(V, FunDependsOn) of
-			     error    -> L1;
-			     {ok, L2} -> L2 ++ L1
-			   end
-		       end,
-  DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
-  DictStoreFun = fun(V,Dict) ->
-		     dict:store(V, needed, Dict)
-		 end,
-  NewChangedFuns = lists:foldl(DictStoreFun,ChangedFuns,DepDependencies),
-  changed(Rest,Callgraph#callgraph{changed_funs = NewChangedFuns});
-changed([], Callgraph) ->
-  Callgraph.
-  
 
 %%----------------------------------------------------------------------
 %% Core code
@@ -681,7 +601,8 @@ digraph_postorder(Digraph, LastModule, Acc, DiffMods) ->
   end.
 
 digraph_leaves(Digraph) ->
-  [V || V <- digraph:vertices(Digraph), digraph:out_degree(Digraph, V) =:= 0].
+  A =[V || V <- digraph:vertices(Digraph), digraph:out_degree(Digraph, V) =:= 0],
+  A.
 
 take_sccs_from_fresh_module(Leaves, DiffMods) ->
   FlatLeaves = lists:append(Leaves),
@@ -711,21 +632,7 @@ find_module([{M, _, _}|_]) -> M;
 find_module([Label|Left]) when is_integer(Label) -> find_module(Left).
 
 digraph_finalize(DG, DiffMods) ->
-  DG1 = digraph_utils:condensation(DG),
-  Postorder = digraph_postorder(DG1, DiffMods),
-  digraph:delete(DG1),
-  Postorder.
-
-dependencies(DG, DiffMods) ->
-  V = digraph:vertices(DG),
-  DictStoreFun = fun({Key,Value},Dict) -> dict:store(Key,Value,Dict) end,
-  DependsOnList  = [{V1, digraph:out_neighbours(DG, V1)} || V1 <- V],
-  DependentsList = [{V1, digraph:in_neighbours(DG, V1)}  || V1 <- V],
-  FunDependsOn = lists:foldl(DictStoreFun,dict:new(),DependsOnList),
-  FunDependents = lists:foldl(DictStoreFun,dict:new(),DependentsList),
-  DiffV = [{V1,differ} || {M,_,_} = V1 <- V, lists:member(M,DiffMods)],
-  ChangedFuns = lists:foldl(DictStoreFun,dict:new(),DiffV),
-  {ChangedFuns, FunDependsOn, FunDependents}.
+  digraph_postorder(DG, DiffMods).
 
 digraph_reaching_subgraph(Funs, DG) ->  
   Vertices = digraph_utils:reaching(Funs, DG),
@@ -850,3 +757,75 @@ get_behaviour_api_calls(Callgraph) ->
 
 put_diff_mods(DiffMods, Callgraph) ->
   Callgraph#callgraph{diff_mods = DiffMods}.
+
+%%=============================================================================
+%% Utilities for faster plt check
+%%=============================================================================
+
+dependencies(DG, DiffMods) ->
+  F = digraph:vertices(DG),
+  DependsOnList  = [{F1, digraph:out_neighbours(DG, F1)} || F1 <- F],
+  DependentsList = [{F1, digraph:in_neighbours(DG, F1)}  || F1 <- F],
+  DependsOnDict  = lists:foldl(fun dict_store/2, dict:new(), DependsOnList),
+  DependentsDict = lists:foldl(fun dict_store/2, dict:new(), DependentsList),
+  DiffF = [L || L <- F, {M,_,_} <- L, lists:member(M,DiffMods)],
+  NeedF = needed_fixpoint(DiffF,DependsOnDict),
+  DiffFTagged = [{F1, differ} || F1 <- DiffF],
+  NeedFTagged = [{F1, needed} || F1 <- NeedF],
+  DifferFuns = lists:foldl(fun dict_store/2, dict:new(), DiffFTagged),
+  NeededFuns = lists:foldl(fun dict_store/2, DifferFuns, NeedFTagged),
+  {NeededFuns, DependsOnDict, DependentsDict}.
+
+dict_store({Key, Value}, Dict) ->
+  dict:store(Key, Value, Dict).
+
+needed_fixpoint(DiffF, DependsOnDict) ->
+  sets:to_list(needed_fixpoint(DiffF, DependsOnDict, sets:new())).
+
+needed_fixpoint(Base, Dict, Set) ->
+  NewBase = lists:append([dict:fetch(Q, Dict) || Q <- Base]),
+  NewSet = lists:foldl(fun sets:add_element/2,Set,NewBase),
+  case sets:size(NewSet) =:= sets:size(Set) of
+    true  -> NewSet;
+    false -> needed_fixpoint(NewBase, Dict, NewSet)
+  end.
+  
+-spec need_analysis(scc(), callgraph()) -> boolean().
+
+need_analysis(SCC, Callgraph) ->
+  ChangedFuns = Callgraph#callgraph.changed_funs,
+  case dict:find(SCC, ChangedFuns) of
+    {ok, differ} -> 
+      ?ldebug("\n has file that differs",[]),
+      true;
+    {ok, needed} ->   
+      ?ldebug("\n is needed by: ~p",[dict:fetch(SCC, Callgraph#callgraph.is_dependent)]),
+      true;
+    error ->
+      ?ldebug("\n skipped",[]),
+      false
+  end.
+
+-spec changed(scc(), callgraph()) -> callgraph().
+
+changed(SCC, Callgraph) ->
+  DependentsDict = Callgraph#callgraph.is_dependent,
+  DependsOnDict = Callgraph#callgraph.depends_on,
+  ChangedFuns = Callgraph#callgraph.changed_funs,
+  {ok, SCCDependents} = dict:find(SCC,DependentsDict),
+  DepDependenciesFun = 
+    fun(V,L1) -> 
+	case dict:find(V, DependsOnDict) of
+	  error    -> L1;
+	  {ok, L2} -> [L2|L1]
+	end
+    end,
+  DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
+  DictStoreFun = 
+    fun(V,Dict) ->
+	dict:store(V, needed, Dict)
+    end,
+  NewChangedFuns = lists:foldl(DictStoreFun,ChangedFuns,DepDependencies),
+  Callgraph#callgraph{changed_funs = NewChangedFuns}.
+
+%-------------------------------------------------------------------------------

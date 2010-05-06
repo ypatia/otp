@@ -123,7 +123,8 @@ get_refined_success_typings(State) ->
 get_warnings(Callgraph, Plt, DocPlt, Codeserver,
 	     NoWarnUnused, Parent, BehavioursChk) ->
   InitState = #st{callgraph = Callgraph, codeserver = Codeserver,
-		  no_warn_unused = NoWarnUnused, parent = Parent, plt = Plt},
+		  no_warn_unused = NoWarnUnused, parent = Parent, plt = Plt,
+		  old_plt = dialyzer_plt:new()},
   NewState = get_refined_success_typings(InitState),
   Mods = dialyzer_callgraph:modules(NewState#st.callgraph),
   CWarns = dialyzer_contracts:get_invalid_contract_warnings(Mods, Codeserver,
@@ -161,13 +162,12 @@ get_warnings_from_modules([], #st{plt = Plt}, DocPlt, _, Acc) ->
   {lists:flatten(Acc), Plt, DocPlt}.
 
 refine_succ_typings(ModulePostorder, State) ->
-  ?debug("Module postorder: ~p\n", [ModulePostorder]),
   refine_succ_typings(ModulePostorder, State, []).
 
 refine_succ_typings([SCC|SCCs], State, Fixpoint) ->
   Msg = io_lib:format("Dataflow of one SCC: ~w\n", [SCC]),
   send_log(State#st.parent, Msg),
-  ?debug("~s\n", [Msg]),
+  ?ldebug("~s", [Msg]),
   {NewState, FixpointFromScc} =
     case SCC of
       [M] -> refine_one_module(M, State);
@@ -286,7 +286,6 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent} = State,
   case dialyzer_callgraph:take_scc(Callgraph) of
     {ok, SCC, NewCallgraph} ->
       Msg = io_lib:format("Typesig analysis for SCC: ~w\n", [format_scc(SCC)]),
-      ?debug("~s", [Msg]),
       send_log(Parent, Msg),
       {NewState, NewNotFixpoint1} =
 	analyze_scc(SCC, State#st{callgraph = NewCallgraph}),
@@ -307,21 +306,18 @@ analyze_scc(SCC, #st{codeserver = Codeserver,
     case dialyzer_callgraph:need_analysis(SCC, Callgraph) of
       false -> 
 	OldTypes = get_old_succ_types(SCC, State#st.old_plt),
-	case OldTypes =:= none of
-	  false ->
-	    ?ldebug("Skipped",[]),
-	    NewCallgraph = dialyzer_callgraph:unchanged(SCC, Callgraph),
-	    PltContracts = get_old_plt_contracts(SCC, State#st.old_plt),
-	    State1 = State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
-	    ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
-	    {State1#st{plt = ContrPlt, callgraph = NewCallgraph}, []};
-	  true -> {not_ready,"Missing "}
-	end;
-      true -> {not_ready," "}
+	PltContracts = get_old_plt_contracts(SCC, State#st.old_plt),
+	State1 = State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
+	ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
+	case OldTypes =:= [] of
+	  true -> ?ldebug(" nothing added",[]);
+	  false -> ?ldebug(" adding from old plt",[])
+	end,
+	{State1#st{plt = ContrPlt}, []};
+      true -> not_ready
     end,
   case Result of
-    {not_ready,Msg} ->
-      ?ldebug("~s",[Msg]),
+    not_ready ->
       SCC_Info = [{MFA,
 		   dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
 		   dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
@@ -337,7 +333,7 @@ analyze_scc(SCC, #st{codeserver = Codeserver,
 	  true  -> ?ldebug("changed",[]),
 		   {dialyzer_callgraph:changed(SCC, Callgraph), NotFixpoint2};
 	  false -> ?ldebug("unchanged",[]),
-		   {dialyzer_callgraph:unchanged(SCC, Callgraph),[]}
+		   {Callgraph,[]}
 	end,
       State2 = insert_into_plt(SuccTypes2, State),
       ContrPlt2 = dialyzer_plt:insert_contract_list(State2#st.plt, PltContracts2),
@@ -349,7 +345,8 @@ get_old_succ_types(SCC, Plt) ->
   get_old_succ_types(SCC, Plt, []).
 get_old_succ_types([SCC|Rest], Plt, Acc) ->
   case dialyzer_plt:lookup(Plt, SCC) of
-    none -> none;
+    none ->
+      get_old_succ_types(Rest, Plt, Acc);
     {value, {_RetT, _ArgT} = Type} ->
       get_old_succ_types(Rest, Plt, [{SCC, Type}|Acc])
   end;
@@ -358,13 +355,15 @@ get_old_succ_types([], _Plt, Acc) ->
 
 get_old_plt_contracts(SCC, Plt) ->
   get_old_plt_contracts(SCC, Plt, []).
-get_old_plt_contracts([SCC|Rest], Plt, Acc) ->
+get_old_plt_contracts([{_M,_F,_A} = SCC|Rest], Plt, Acc) ->
   case dialyzer_plt:lookup_contract(Plt, SCC) of
     {value, Contract} ->
       get_old_plt_contracts(Rest, Plt, [{SCC, Contract}|Acc]);
     none ->
       get_old_plt_contracts(Rest, Plt, Acc)
   end;
+get_old_plt_contracts([_SCC|Rest], Plt, Acc) ->
+  get_old_plt_contracts(Rest, Plt, Acc);
 get_old_plt_contracts([], _Plt, Acc) ->
   Acc.
 
