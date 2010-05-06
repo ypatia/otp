@@ -63,7 +63,7 @@
 	 get_behaviour_api_calls/1, put_diff_mods/2, put_fast_plt/2,
 	 get_fast_plt/1]).
 
--define(LOCAL_DEBUG,true).
+%-define(LOCAL_DEBUG,true).
 
 -ifdef(LOCAL_DEBUG).
 -define(ldebug(X__, Y__), io:format(X__, Y__)).

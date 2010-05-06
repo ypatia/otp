@@ -44,7 +44,7 @@
 -define(debug(X__, Y__), ok).
 -endif.
 
--define(LOCAL_DEBUG,true).
+%-define(LOCAL_DEBUG,true).
 
 -ifdef(LOCAL_DEBUG).
 -define(ldebug(X__, Y__), io:format(X__, Y__)).
