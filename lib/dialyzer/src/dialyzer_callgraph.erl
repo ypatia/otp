@@ -60,7 +60,8 @@
          get_race_code/1, get_race_detection/1, race_code_new/1,
          put_digraph/2, put_race_code/2, put_race_detection/2,
          put_named_tables/2, put_public_tables/2, put_behaviour_api_calls/2,
-	 get_behaviour_api_calls/1, put_diff_mods/2]).
+	 get_behaviour_api_calls/1, put_diff_mods/2, put_fast_plt/2,
+	 get_fast_plt/1]).
 
 %-define(LOCAL_DEBUG,true).
 
@@ -115,7 +116,8 @@
 		    diff_mods      = []            :: [_],
 		    depends_on     = dict:new()    :: dict(),
 		    is_dependent   = dict:new()    :: dict(),
-		    changed_funs   = dict:new()    :: dict()
+		    changed_funs   = dict:new()    :: dict(),
+		    fast_plt       = false         :: boolean()
 		   }).
 
 %% Exported Types
@@ -317,19 +319,37 @@ create_module_digraph([], MDG) ->
 
 -spec finalize(callgraph()) -> callgraph().
 
-finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
+finalize(#callgraph{fast_plt = FastPlt} = CG) ->
+  case FastPlt of
+    true  -> fast_finalize(CG);
+    false -> slow_finalize(CG)
+  end.
+
+fast_finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   DG1 = digraph_utils:condensation(DG),
   {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG1, DiffMods),
   PostOrder = digraph_finalize(DG1, DiffMods),
-  digraph:delete(DG1),
+  digraph_delete(DG1),
   CG#callgraph{postorder    = PostOrder,
 	       depends_on   = FunDependsOn,
 	       is_dependent = FunDependents,
 	       changed_funs = ChangedFuns}.
 
+slow_finalize(#callgraph{digraph = DG} = CG) ->
+  DG1 = digraph_utils:condensation(DG),
+  PostOrder = digraph_finalize(DG1,[]),
+  digraph_delete(DG1),
+  CG#callgraph{postorder = PostOrder}.
+
 -spec reset_from_funs([mfa_or_funlbl()], callgraph()) -> callgraph().
 
-reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
+reset_from_funs(Funs, #callgraph{fast_plt = FastPlt} = CG) ->
+  case FastPlt of
+    true  -> fast_reset_from_funs(Funs, CG);
+    false -> slow_reset_from_funs(Funs, CG)
+  end.
+
+fast_reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
   SG1 = digraph_utils:condensation(SubGraph),
   {ChangedFuns, FunDependsOn, FunDependents} = dependencies(SG1, DiffMods),
@@ -340,6 +360,12 @@ reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
 	       depends_on   = FunDependsOn,
 	       is_dependent = FunDependents,
 	       changed_funs = ChangedFuns}.
+
+slow_reset_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
+  SubGraph = digraph_reaching_subgraph(Funs, DG),
+  Postorder = slow_digraph_finalize(SubGraph),
+  digraph_delete(SubGraph),
+  CG#callgraph{postorder = Postorder}.
 
 -spec module_postorder_from_funs([mfa_or_funlbl()], callgraph()) -> [[module()]].
 
@@ -633,6 +659,12 @@ find_module([Label|Left]) when is_integer(Label) -> find_module(Left).
 digraph_finalize(DG, DiffMods) ->
   digraph_postorder(DG, DiffMods).
 
+slow_digraph_finalize(DG) ->
+  DG1 = digraph_utils:condensation(DG),
+  Postorder = digraph_postorder(DG1,[]),
+  digraph:delete(DG1),
+  Postorder.
+
 digraph_reaching_subgraph(Funs, DG) ->  
   Vertices = digraph_utils:reaching(Funs, DG),
   digraph_utils:subgraph(DG, Vertices).
@@ -756,6 +788,16 @@ get_behaviour_api_calls(Callgraph) ->
 
 put_diff_mods(DiffMods, Callgraph) ->
   Callgraph#callgraph{diff_mods = DiffMods}.
+
+-spec put_fast_plt(boolean(), callgraph()) -> callgraph().
+
+put_fast_plt(FastPlt, Callgraph) ->
+  Callgraph#callgraph{fast_plt = FastPlt}.
+
+-spec get_fast_plt(callgraph()) -> boolean().
+
+get_fast_plt(Callgraph) ->
+  Callgraph#callgraph.fast_plt.
 
 %%=============================================================================
 %% Utilities for faster plt check

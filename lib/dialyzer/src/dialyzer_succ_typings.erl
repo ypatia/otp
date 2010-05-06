@@ -63,12 +63,13 @@
 
 -type parent() :: 'none' | pid().
 
--record(st, {callgraph      :: dialyzer_callgraph:callgraph(),
-	     codeserver     :: dialyzer_codeserver:codeserver(),
-	     no_warn_unused :: set(),
-	     parent = none  :: parent(),
-	     old_plt        :: dialyzer_plt:plt(),
-	     plt            :: dialyzer_plt:plt()}).
+-record(st, {callgraph          :: dialyzer_callgraph:callgraph(),
+	     codeserver         :: dialyzer_codeserver:codeserver(),
+	     no_warn_unused     :: set(),
+	     parent = none      :: parent(),
+	     old_plt            :: dialyzer_plt:plt(),
+	     plt                :: dialyzer_plt:plt(),
+	     fast_plt = false   :: boolean()}).
 
 %%--------------------------------------------------------------------
 
@@ -81,13 +82,14 @@ analyze_callgraph(Callgraph, Plt, Codeserver) ->
   analyze_callgraph(Callgraph, Plt, EmptyPlt, Codeserver, none).
 
 -spec analyze_callgraph(dialyzer_callgraph:callgraph(), dialyzer_plt:plt(),
-			dialyzer_plt:plt(), dialyzer_codeserver:codeserver(),
+			dialyzer_plt:plt(), dialyzer_codeserver:codeserver(), 
 			parent()) ->
          dialyzer_plt:plt().
 
 analyze_callgraph(Callgraph, Plt, OldPlt, Codeserver, Parent) ->
   State = #st{callgraph = Callgraph, plt = Plt, old_plt = OldPlt,
-	      codeserver = Codeserver, parent = Parent},
+	      codeserver = Codeserver, parent = Parent, 
+	      fast_plt = dialyzer_callgraph:get_fast_plt(Callgraph)},
   NewState = get_refined_success_typings(State),
   NewState#st.plt.
 
@@ -281,14 +283,14 @@ compare_types_1([], [], _Strict, NotFixpoint) ->
 find_succ_typings(State) ->
   find_succ_typings(State, []).
 
-find_succ_typings(#st{callgraph = Callgraph, parent = Parent} = State,
+find_succ_typings(#st{callgraph = Callgraph, parent = Parent, fast_plt = Fast} = State,
 		  NotFixpoint) ->
   case dialyzer_callgraph:take_scc(Callgraph) of
     {ok, SCC, NewCallgraph} ->
       Msg = io_lib:format("Typesig analysis for SCC: ~w\n", [format_scc(SCC)]),
       send_log(Parent, Msg),
       {NewState, NewNotFixpoint1} =
-	analyze_scc(SCC, State#st{callgraph = NewCallgraph}),
+	analyze_scc(SCC, State#st{callgraph = NewCallgraph}, Fast),
       NewNotFixpoint2 = ordsets:union(NewNotFixpoint1, NotFixpoint),
       find_succ_typings(NewState, NewNotFixpoint2);
     none ->
@@ -299,8 +301,29 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent} = State,
       end
   end.
 
-analyze_scc(SCC, #st{codeserver = Codeserver,
-		     callgraph= Callgraph} = State) ->
+analyze_scc(SCC, State, Fast) ->
+  case Fast of
+    true  -> fast_analyze_scc(SCC, State);
+    false -> slow_analyze_scc(SCC, State)
+  end.
+
+slow_analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
+  SCC_Info = [{MFA, 
+	       dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
+	       dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
+	      || {M, _, _} = MFA <- SCC],
+  Contracts1 = [{MFA, dialyzer_codeserver:lookup_mfa_contract(MFA, Codeserver)}
+		|| {_, _, _} = MFA <- SCC],
+  Contracts2 = [{MFA, Contract} || {MFA, {ok, Contract}} <- Contracts1],
+  Contracts3 = orddict:from_list(Contracts2),
+  {SuccTypes, PltContracts, NotFixpoint, _AllFuns} = 
+    find_succ_types_for_scc(SCC_Info, Contracts3, State),
+  State1 = insert_into_plt(SuccTypes, State),
+  ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
+  {State1#st{plt = ContrPlt}, NotFixpoint}.
+
+fast_analyze_scc(SCC, #st{codeserver = Codeserver,
+			  callgraph= Callgraph} = State) ->
   ?ldebug("\n~p: ",[SCC]),
   Result =
     case dialyzer_callgraph:need_analysis(SCC, Callgraph) of

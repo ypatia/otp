@@ -173,16 +173,19 @@ analyze_callgraph(Callgraph, State) ->
       OldPlt = State#analysis_state.old_plt,
       DiffMods = State#analysis_state.diff_mods,
       Callgraph0 = dialyzer_callgraph:put_diff_mods(DiffMods, Callgraph),
-      Callgraph1 = dialyzer_callgraph:finalize(Callgraph0),
-      NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph1, Plt, OldPlt,
+      Callgraph1 = dialyzer_callgraph:put_fast_plt(true, Callgraph0),
+      Callgraph2 = dialyzer_callgraph:finalize(Callgraph1),
+      NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph2, Plt, OldPlt,
 						       Codeserver, Parent),
       dialyzer_callgraph:delete(Callgraph1),
       State#analysis_state{plt = NewPlt};
     succ_typings ->
+
       NoWarn = State#analysis_state.no_warn_unused,
       {BehavioursChk, _Known} = State#analysis_state.behaviours,
       DocPlt = State#analysis_state.doc_plt,
-      Callgraph1 = dialyzer_callgraph:finalize(Callgraph),
+      Callgraph0 = dialyzer_callgraph:put_fast_plt(false, Callgraph),
+      Callgraph1 = dialyzer_callgraph:finalize(Callgraph0),
       {Warnings, NewPlt, NewDocPlt} = 
 	dialyzer_succ_typings:get_warnings(Callgraph1, Plt, DocPlt,
 					   Codeserver, NoWarn, Parent,
