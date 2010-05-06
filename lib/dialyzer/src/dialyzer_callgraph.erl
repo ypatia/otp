@@ -605,8 +605,7 @@ digraph_leaves(Digraph) ->
   A.
 
 take_sccs_from_fresh_module(Leaves, DiffMods) ->
-  FlatLeaves = lists:append(Leaves),
-  Query = [M || {M,_,_} <- FlatLeaves, lists:member(M, DiffMods)],
+  Query = [M || {M,_,_} <- lists:append(Leaves), lists:member(M, DiffMods)],
   NewModule =
     case Query of
       []     -> find_module(hd(Leaves));
