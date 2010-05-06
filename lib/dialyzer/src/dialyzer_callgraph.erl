@@ -29,6 +29,7 @@
 
 -export([add_edges/2,
 	 all_nodes/1,
+	 changed/2,
 	 delete/1,
 	 finalize/1,
 	 is_escaping/2,
@@ -61,6 +62,14 @@
          put_digraph/2, put_race_code/2, put_race_detection/2,
          put_named_tables/2, put_public_tables/2, put_behaviour_api_calls/2,
 	 get_behaviour_api_calls/1, put_diff_mods/2]).
+
+%-define(LOCAL_DEBUG,true).
+
+-ifdef(LOCAL_DEBUG).
+-define(ldebug(X__, Y__), io:format(X__, Y__)).
+-else.
+-define(ldebug(X__, Y__), ok).
+-endif.
 
 -include("dialyzer.hrl").
 
@@ -341,19 +350,39 @@ module_postorder_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
 
 need_analysis([SCC|Rest], Callgraph) ->
   ChangedFuns = Callgraph#callgraph.changed_funs,
+  FunDependsOn = Callgraph#callgraph.depends_on,
   case dict:find(SCC, ChangedFuns) of
-    {ok, changed} -> true;
+    {ok, differ} -> 
+      ?ldebug("File differs",[]),
+      true;
+    {ok, needed} ->   
+      FunDependents = Callgraph#callgraph.is_dependent,
+      case dict:find(SCC, FunDependents) of
+	{ok, V2} -> ok
+      end,
+      ?ldebug("Needed by higher (~p)",[V2]),
+      true;
     error ->
-      FunDependsOn = Callgraph#callgraph.depends_on,
-      case dict:find(SCC,FunDependsOn) of
-	error -> true;
-	{ok, V1} -> 
-	  case V1 =/= [] of
-	    true  -> true;
-	    false -> need_analysis(Rest, Callgraph)
-	  end
-      end;
-    changed   -> true
+      Stop =
+	case dict:find(SCC,FunDependsOn) of
+	  {ok, V1} -> 
+	    case V1 =/= [] of
+	      true -> 
+		case V1 =/= [SCC] of
+		  true -> 
+		    true;
+		  false -> 
+		    false
+		end;
+	      false -> 
+		false
+	    end
+	end,
+      case Stop of
+	true  -> ?ldebug("SKIP? Deps:~p",[V1]),
+		 true;
+	false -> need_analysis(Rest, Callgraph)
+      end
   end;
 need_analysis([], _Callgraph) ->
   false.
@@ -373,6 +402,32 @@ unchanged([SCC|Rest], Callgraph) ->
   unchanged(Rest,Callgraph#callgraph{depends_on = NewFunDependsOn});
 unchanged([], Callgraph) ->
   Callgraph.
+
+-spec changed(_, callgraph()) -> callgraph().
+
+changed([SCC|Rest], Callgraph) ->
+  FunDependents = Callgraph#callgraph.is_dependent,
+  FunDependsOn = Callgraph#callgraph.depends_on,
+  ChangedFuns = Callgraph#callgraph.changed_funs,
+  SCCDependents = case dict:find(SCC,FunDependents) of
+		    error -> [];
+		    {ok,Value} -> Value
+		  end,
+  DepDependenciesFun = fun(V,L1) -> 
+			   case dict:find(V, FunDependsOn) of
+			     error    -> L1;
+			     {ok, L2} -> L2 ++ L1
+			   end
+		       end,
+  DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
+  DictStoreFun = fun(V,Dict) ->
+		     dict:store(V, needed, Dict)
+		 end,
+  NewChangedFuns = lists:foldl(DictStoreFun,ChangedFuns,DepDependencies),
+  changed(Rest,Callgraph#callgraph{changed_funs = NewChangedFuns});
+changed([], Callgraph) ->
+  Callgraph.
+  
 
 %%----------------------------------------------------------------------
 %% Core code
@@ -668,7 +723,7 @@ dependencies(DG, DiffMods) ->
   DependentsList = [{V1, digraph:in_neighbours(DG, V1)}  || V1 <- V],
   FunDependsOn = lists:foldl(DictStoreFun,dict:new(),DependsOnList),
   FunDependents = lists:foldl(DictStoreFun,dict:new(),DependentsList),
-  DiffV = [{V1,changed} || {M,_,_} = V1 <- V, lists:member(M,DiffMods)],
+  DiffV = [{V1,differ} || {M,_,_} = V1 <- V, lists:member(M,DiffMods)],
   ChangedFuns = lists:foldl(DictStoreFun,dict:new(),DiffV),
   {ChangedFuns, FunDependsOn, FunDependents}.
 

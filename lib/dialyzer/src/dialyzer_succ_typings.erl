@@ -293,7 +293,7 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent} = State,
       NewNotFixpoint2 = ordsets:union(NewNotFixpoint1, NotFixpoint),
       find_succ_typings(NewState, NewNotFixpoint2);
     none ->
-      ?debug("==================== Typesig done ====================\n\n", []),
+      ?ldebug("\n==================== Typesig done ====================\n", []),
       case NotFixpoint =:= [] of
 	true  -> {fixpoint, State};
 	false -> {not_fixpoint, NotFixpoint, State}
@@ -315,13 +315,13 @@ analyze_scc(SCC, #st{codeserver = Codeserver,
 	    State1 = State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
 	    ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
 	    {State1#st{plt = ContrPlt, callgraph = NewCallgraph}, []};
-	  true -> {not_ready,"Missing"}
+	  true -> {not_ready,"Missing "}
 	end;
-      true -> {not_ready,"Dependencies"}
+      true -> {not_ready," "}
     end,
   case Result of
     {not_ready,Msg} ->
-      ?ldebug("~s... ",[Msg]),
+      ?ldebug("~s",[Msg]),
       SCC_Info = [{MFA,
 		   dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
 		   dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
@@ -335,7 +335,7 @@ analyze_scc(SCC, #st{codeserver = Codeserver,
       {NewCallgraph2, NotFixpoint} =
 	case differ_from_old_plt(AllFuns, State, SuccTypes2) of
 	  true  -> ?ldebug("changed",[]),
-		   {Callgraph, NotFixpoint2};
+		   {dialyzer_callgraph:changed(SCC, Callgraph), NotFixpoint2};
 	  false -> ?ldebug("unchanged",[]),
 		   {dialyzer_callgraph:unchanged(SCC, Callgraph),[]}
 	end,
