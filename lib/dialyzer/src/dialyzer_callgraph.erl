@@ -21,7 +21,7 @@
 %%%-------------------------------------------------------------------
 %%% File    : dialyzer_callgraph.erl
 %%% Author  : Tobias Lindahl <tobiasl@it.uu.se>
-%%% Description : 
+%%% Description :
 %%%
 %%% Created : 30 Mar 2005 by Tobias Lindahl <tobiasl@it.uu.se>
 %%%-------------------------------------------------------------------
@@ -76,10 +76,10 @@
 %%-----------------------------------------------------------------------------
 %% A callgraph is a directed graph where the nodes are functions and a
 %% call between two functions is an edge from the caller to the callee.
-%% 
+%%
 %% calls	-  A mapping from call site (and apply site) labels
 %%		   to the possible functions that can be called.
-%% digraph	-  A digraph representing the callgraph. 
+%% digraph	-  A digraph representing the callgraph.
 %%		   Nodes are represented as MFAs or labels.
 %% esc		-  A set of all escaping functions as reported by dialyzer_dep.
 %% postorder	-  A list of strongly connected components of the callgraph
@@ -137,7 +137,7 @@ all_nodes(#callgraph{digraph = DG}) ->
 
 -spec lookup_rec_var(label(), callgraph()) -> 'error' | {'ok', mfa()}.
 
-lookup_rec_var(Label, #callgraph{rec_var_map = RecVarMap}) 
+lookup_rec_var(Label, #callgraph{rec_var_map = RecVarMap})
   when is_integer(Label) ->
   dict:find(Label, RecVarMap).
 
@@ -180,7 +180,7 @@ is_self_rec(MfaOrLabel, #callgraph{self_rec = SelfRecs}) ->
 -spec is_escaping(label(), callgraph()) -> boolean().
 
 is_escaping(Label, #callgraph{esc = Esc}) when is_integer(Label) ->
-  sets:is_element(Label, Esc).  
+  sets:is_element(Label, Esc).
 
 -type callgraph_edge() :: {mfa_or_funlbl(),mfa_or_funlbl()}.
 -spec add_edges([callgraph_edge()], callgraph()) -> callgraph().
@@ -222,7 +222,7 @@ find_non_local_calls([{{M,_,_}, {M,_,_}}|Left], Set) ->
 find_non_local_calls([{{M1,_,_}, {M2,_,_}} = Edge|Left], Set) when M1 =/= M2 ->
   find_non_local_calls(Left, sets:add_element(Edge, Set));
 find_non_local_calls([{{_,_,_}, Label}|Left], Set) when is_integer(Label) ->
-  find_non_local_calls(Left, Set);  
+  find_non_local_calls(Left, Set);
 find_non_local_calls([{Label, {_,_,_}}|Left], Set) when is_integer(Label) ->
   find_non_local_calls(Left, Set);
 find_non_local_calls([{Label1, Label2}|Left], Set) when is_integer(Label1),
@@ -382,22 +382,22 @@ module_postorder_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
 scan_core_tree(Tree, #callgraph{calls = OldCalls,
 				esc = OldEsc,
 				name_map = OldNameMap,
-				rec_var_map = OldRecVarMap, 
+				rec_var_map = OldRecVarMap,
 				rev_name_map = OldRevNameMap,
 				self_rec = OldSelfRec} = CG) ->
   %% Build name map and recursion variable maps.
-  {NewNameMap, NewRevNameMap, NewRecVarMap} = 
+  {NewNameMap, NewRevNameMap, NewRecVarMap} =
     build_maps(Tree, OldRecVarMap, OldNameMap, OldRevNameMap),
-  
+
   %% First find the module-local dependencies.
   {Deps0, EscapingFuns, Calls} = dialyzer_dep:analyze(Tree),
   NewCalls = dict:merge(fun(_Key, Val, Val) -> Val end, OldCalls, Calls),
   NewEsc = sets:union(sets:from_list(EscapingFuns), OldEsc),
   LabelEdges = get_edges_from_deps(Deps0),
-  
+
   %% Find the self recursive functions. Named functions get both the
   %% key and their name for convenience.
-  SelfRecs0 = lists:foldl(fun({Key, Key}, Acc) -> 
+  SelfRecs0 = lists:foldl(fun({Key, Key}, Acc) ->
 			      case dict:find(Key, NewNameMap) of
 				error      -> [Key|Acc];
 				{ok, Name} -> [Key, Name|Acc]
@@ -405,9 +405,9 @@ scan_core_tree(Tree, #callgraph{calls = OldCalls,
 			     (_, Acc) -> Acc
 			  end, [], LabelEdges),
   SelfRecs = sets:union(sets:from_list(SelfRecs0), OldSelfRec),
-  
+
   NamedEdges1 = name_edges(LabelEdges, NewNameMap),
-  
+
   %% We need to scan for inter-module calls since these are not tracked
   %% by dialyzer_dep. Note that the caller is always recorded as the
   %% top level function. This is OK since the included functions are
@@ -429,13 +429,13 @@ scan_core_tree(Tree, #callgraph{calls = OldCalls,
   CG1#callgraph{calls = NewCalls,
                 esc = NewEsc,
                 name_map = NewNameMap,
-                rec_var_map = NewRecVarMap, 
+                rec_var_map = NewRecVarMap,
                 rev_name_map = NewRevNameMap,
                 self_rec = SelfRecs}.
 
 build_maps(Tree, RecVarMap, NameMap, RevNameMap) ->
   %% We only care about the named (top level) functions. The anonymous
-  %% functions will be analysed together with their parents. 
+  %% functions will be analysed together with their parents.
   Defs = cerl:module_defs(Tree),
   Mod = cerl:atom_val(cerl:module_name(Tree)),
   lists:foldl(fun({Var, Function}, {AccNameMap, AccRevNameMap, AccRecVarMap}) ->
@@ -453,7 +453,7 @@ get_edges_from_deps(Deps) ->
   %% this information.
   Edges = dict:fold(fun(external, _Set, Acc) -> Acc;
 		       (Caller, Set, Acc)    ->
-			[[{Caller, Callee} || Callee <- Set, 
+			[[{Caller, Callee} || Callee <- Set,
 					      Callee =/= external]|Acc]
 		    end, [], Deps),
   lists:flatten(Edges).
@@ -494,16 +494,16 @@ scan_one_core_fun(TopTree, FunName) ->
 		    CalleeM = cerl:call_module(Tree),
 		    CalleeF = cerl:call_name(Tree),
 		    A = length(cerl:call_args(Tree)),
-		    case (cerl:is_c_atom(CalleeM) andalso 
+		    case (cerl:is_c_atom(CalleeM) andalso
 			  cerl:is_c_atom(CalleeF)) of
-		      true -> 
+		      true ->
 			M = cerl:atom_val(CalleeM),
 			F = cerl:atom_val(CalleeF),
 			case erl_bif_types:is_known(M, F, A) of
 			  true -> Acc;
 			  false -> [{FunName, {M, F, A}}|Acc]
 			end;
-		      false -> 
+		      false ->
 			%% We cannot handle run-time bindings
 			Acc
 		    end;
@@ -546,7 +546,7 @@ digraph_confirm_vertices([MFA|Left], DG) ->
   digraph_confirm_vertices(Left, DG);
 digraph_confirm_vertices([], DG) ->
   DG.
-  
+
 digraph_remove_external(DG) ->
   Vertices = digraph:vertices(DG),
   Unconfirmed = remove_unconfirmed(Vertices, DG),
@@ -651,7 +651,7 @@ scc_belongs_to_module([{M, _, _}|Left], Module) ->
   end;
 scc_belongs_to_module([], _Module) ->
   false.
-      
+
 -spec find_module(scc()) -> module().
 
 find_module([{M, _, _}|_]) -> M;
@@ -666,7 +666,7 @@ slow_digraph_finalize(DG) ->
   digraph:delete(DG1),
   Postorder.
 
-digraph_reaching_subgraph(Funs, DG) ->  
+digraph_reaching_subgraph(Funs, DG) ->
   Vertices = digraph_utils:reaching(Funs, DG),
   digraph_utils:subgraph(DG, Vertices).
 
@@ -676,17 +676,17 @@ digraph_reaching_subgraph(Funs, DG) ->
 
 -spec cleanup(callgraph()) -> callgraph().
 
-cleanup(#callgraph{digraph = Digraph,                                          
-                   name_map = NameMap,                                         
-                   rev_name_map = RevNameMap,                                  
-                   public_tables = PublicTables,                               
-                   named_tables = NamedTables,                                 
-                   race_code = RaceCode}) ->                                   
+cleanup(#callgraph{digraph = Digraph,
+                   name_map = NameMap,
+                   rev_name_map = RevNameMap,
+                   public_tables = PublicTables,
+                   named_tables = NamedTables,
+                   race_code = RaceCode}) ->
   #callgraph{digraph = Digraph,
-             name_map = NameMap,                                          
-             rev_name_map = RevNameMap,                                   
-             public_tables = PublicTables,                                
-             named_tables = NamedTables,                                  
+             name_map = NameMap,
+             rev_name_map = RevNameMap,
+             public_tables = PublicTables,
+             named_tables = NamedTables,
              race_code = RaceCode}.
 
 -spec get_digraph(callgraph()) -> digraph().
@@ -757,7 +757,7 @@ to_dot(#callgraph{digraph = DG, esc = Esc} = CG, File) ->
 	      {ok, Name} -> Name
 	    end
 	end,
-  Escaping = [{Fun(L), {color, red}} 
+  Escaping = [{Fun(L), {color, red}}
 	      || L <- sets:to_list(Esc), L =/= external],
   Vertices = digraph_edges(DG),
   hipe_dot:translate_list(Vertices, File, "CG", Escaping).
@@ -831,7 +831,7 @@ needed_fixpoint(Base, Dict, Set, OldSize) ->
     true  -> sets:to_list(Set);
     false -> needed_fixpoint(CleanBase, Dict, NewSet, NewSize)
   end.
-  
+
 -spec need_analysis(scc(), callgraph()) -> boolean().
 
 need_analysis(SCC, Callgraph) ->
@@ -844,10 +844,10 @@ changed(SCC, Callgraph) ->
   DependsOnDict = Callgraph#callgraph.depends_on,
   ChangedFuns = Callgraph#callgraph.changed_funs,
   {ok, SCCDependents} = dict:find(SCC,DependentsDict),
-  DepDependenciesFun = 
+  DepDependenciesFun =
     fun(V,L1) -> [dict:fetch(V, DependsOnDict)|L1] end,
   DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
-  NewChangedFuns = 
+  NewChangedFuns =
     lists:foldl(fun sets:add_element/2,ChangedFuns,DepDependencies),
   Callgraph#callgraph{changed_funs = NewChangedFuns}.
 

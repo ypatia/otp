@@ -30,7 +30,7 @@
 -type dial_cl_parse_ret() :: {'check_init', #options{}}
                            | {'plt_info', #options{}}
                            | {'cl', #options{}}
-                           | {{'gui', 'gs' | 'wx'}, #options{}} 
+                           | {{'gui', 'gs' | 'wx'}, #options{}}
                            | {'error', string()}.
 
 %%-----------------------------------------------------------------------
@@ -319,7 +319,7 @@ help_warnings() ->
 
 help_message() ->
   S = "Usage: dialyzer [--help] [--version] [--shell] [--quiet] [--verbose]
-		[-pa dir]* [--plt plt] [-Ddefine]* [-I include_dir]* 
+		[-pa dir]* [--plt plt] [-Ddefine]* [-I include_dir]*
 		[--output_plt file] [-Wwarn]* [--src] [--gui | --wx]
 		[files_or_dirs] [-r dirs] [--apps applications] [-o outfile]
 		[--build_plt] [--add_to_plt] [--remove_from_plt]
@@ -363,7 +363,7 @@ Options:
   --output_plt file
       Store the plt at the specified file after building it
   --plt plt
-      Use the specified plt as the initial plt (if the plt was built 
+      Use the specified plt as the initial plt (if the plt was built
       during setup the files will be checked for consistency)
   -Wwarn
       A family of options which selectively turn on/off warnings
@@ -384,9 +384,9 @@ Options:
       Use --plt or --output_plt to override the default plt location.
   --add_to_plt
       The plt is extended to also include the files specified with -c and -r.
-      Use --plt to specify wich plt to start from, and --output_plt to 
-      specify where to put the plt. Note that the analysis might include 
-      files from the plt if they depend on the new files. 
+      Use --plt to specify wich plt to start from, and --output_plt to
+      specify where to put the plt. Note that the analysis might include
+      files from the plt if they depend on the new files.
       This option only works with beam files.
   --remove_from_plt
       The information from the files specified with -c and -r is removed
@@ -401,10 +401,10 @@ Options:
       Skip the plt check when running Dialyzer. Useful when working with
       installed plts that never change.
   --plt_info
-      Makes Dialyzer print information about the plt and then quit. The plt 
+      Makes Dialyzer print information about the plt and then quit. The plt
       can be specified with --plt.
   --get_warnings
-      Makes Dialyzer emit warnings even when manipulating the plt. Only 
+      Makes Dialyzer emit warnings even when manipulating the plt. Only
       emits warnings for files that are actually analyzed.
   --dump_callgraph file
       Dump the call graph into the specified file whose format is determined
@@ -462,13 +462,13 @@ warning_options_msg() ->
      Include warnings about behaviour callbacks which drift from the published
      recommended interfaces.
   -Wunderspecs ***
-     Warn about underspecified functions 
+     Warn about underspecified functions
      (those whose -spec is strictly more allowing than the success typing).
 
 The following options are also available but their use is not recommended:
 (they are mostly for Dialyzer developers and internal debugging)
   -Woverspecs ***
-     Warn about overspecified functions 
+     Warn about overspecified functions
      (those whose -spec is strictly less allowing than the success typing).
   -Wspecdiffs ***
      Warn when the -spec is different than the success typing.

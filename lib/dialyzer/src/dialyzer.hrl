@@ -31,7 +31,7 @@
 -define(RET_DISCREPANCIES, 2).
 
 -type dial_ret() :: ?RET_NOTHING_SUSPICIOUS
-                  | ?RET_INTERNAL_ERROR 
+                  | ?RET_INTERNAL_ERROR
                   | ?RET_DISCREPANCIES.
 
 %%--------------------------------------------------------------------
@@ -87,7 +87,7 @@
 %%--------------------------------------------------------------------
 %% THIS TYPE SHOULD ONE DAY DISAPPEAR -- IT DOES NOT BELONG HERE
 %%--------------------------------------------------------------------
- 
+
 -type ordset(T)      :: [T] .      %% XXX: temporarily
 
 %%--------------------------------------------------------------------

@@ -82,13 +82,13 @@ analyze_callgraph(Callgraph, Plt, Codeserver) ->
   analyze_callgraph(Callgraph, Plt, EmptyPlt, Codeserver, none).
 
 -spec analyze_callgraph(dialyzer_callgraph:callgraph(), dialyzer_plt:plt(),
-			dialyzer_plt:plt(), dialyzer_codeserver:codeserver(), 
+			dialyzer_plt:plt(), dialyzer_codeserver:codeserver(),
 			parent()) ->
          dialyzer_plt:plt().
 
 analyze_callgraph(Callgraph, Plt, OldPlt, Codeserver, Parent) ->
   State = #st{callgraph = Callgraph, plt = Plt, old_plt = OldPlt,
-	      codeserver = Codeserver, parent = Parent, 
+	      codeserver = Codeserver, parent = Parent,
 	      fast_plt = dialyzer_callgraph:get_fast_plt(Callgraph)},
   NewState = get_refined_success_typings(State),
   NewState#st.plt.
@@ -305,7 +305,7 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent, fast_plt = Fast} =
 check_fixpoint(Fixpoint, Callgraph, Fast) ->
   case Fast of
     false -> Fixpoint =:= [];
-    true  -> 
+    true  ->
       has_escaping(Fixpoint, Callgraph)
   end.
 
@@ -324,7 +324,7 @@ analyze_scc(SCC, State, Fast) ->
   end.
 
 slow_analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
-  SCC_Info = [{MFA, 
+  SCC_Info = [{MFA,
 	       dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
 	       dialyzer_codeserver:lookup_mod_records(M, Codeserver)}
 	      || {M, _, _} = MFA <- SCC],
@@ -332,7 +332,7 @@ slow_analyze_scc(SCC, #st{codeserver = Codeserver} = State) ->
 		|| {_, _, _} = MFA <- SCC],
   Contracts2 = [{MFA, Contract} || {MFA, {ok, Contract}} <- Contracts1],
   Contracts3 = orddict:from_list(Contracts2),
-  {SuccTypes, PltContracts, NotFixpoint, _AllFuns} = 
+  {SuccTypes, PltContracts, NotFixpoint, _AllFuns} =
     find_succ_types_for_scc(SCC_Info, Contracts3, State),
   State1 = insert_into_plt(SuccTypes, State),
   ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
@@ -343,13 +343,13 @@ fast_analyze_scc(SCC, #st{codeserver = Codeserver,
   ?ldebug("\n~p: ",[SCC]),
   Result =
     case dialyzer_callgraph:need_analysis(SCC, Callgraph) of
-      false -> 
+      false ->
 	?ldebug("Skipped",[]),
 	OldTypes = get_old_succ_types(SCC, State#st.old_plt),
 	PltContracts = get_old_plt_contracts(SCC, State#st.old_plt),
-	State1 = 
+	State1 =
 	  State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
-	ContrPlt = 
+	ContrPlt =
 	  dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
 	{State1#st{plt = ContrPlt}, []};
       true -> not_ready
