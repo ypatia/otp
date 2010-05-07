@@ -45,9 +45,9 @@
 	  old_plt                       :: dialyzer_plt:plt(),
 	  start_from     = byte_code    :: start_from(),
 	  use_contracts  = true         :: boolean(),
-	  behaviours = {false,[]}       :: {boolean(),[atom()]},
-	  diff_mods = []                :: [_],
-	  fast_plt = false              :: boolean()
+	  behaviours     = {false, []}  :: {boolean(),[atom()]},
+	  diff_mods      = []           :: [atom()],
+	  fast_plt       = true         :: boolean()
 	 }).
 
 -record(server_state, {parent :: pid(), legal_warnings :: [dial_warn_tag()]}).
@@ -162,7 +162,7 @@ analysis_start(Parent, Analysis) ->
   NewPlt0 = dialyzer_plt:insert_types(Plt, dialyzer_codeserver:get_records(NewCServer)),
   ExpTypes =  dialyzer_codeserver:get_exported_types(NewCServer),
   NewPlt1 = dialyzer_plt:insert_exported_types(NewPlt0, ExpTypes),
-  State0 = State#analysis_state{plt = NewPlt1, old_plt = NewPlt},
+  State0 = State#analysis_state{plt = NewPlt1, old_plt = NewPlt1},
   dump_callgraph(Callgraph, State0, Analysis),
   State1 = State0#analysis_state{codeserver = NewCServer},
   State2 = State1#analysis_state{no_warn_unused = NoWarn},
@@ -193,15 +193,15 @@ analyze_callgraph(Callgraph, State) ->
       OldPlt = State#analysis_state.old_plt,
       DiffMods = State#analysis_state.diff_mods,
       Callgraph0 = dialyzer_callgraph:put_diff_mods(DiffMods, Callgraph),
-      Callgraph1 = dialyzer_callgraph:put_fast_plt(State#analysis_state.fast_plt, 
-						   Callgraph0),
+      Callgraph1 = 
+	dialyzer_callgraph:put_fast_plt(State#analysis_state.fast_plt, 
+					Callgraph0),
       Callgraph2 = dialyzer_callgraph:finalize(Callgraph1),
       NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph2, Plt, OldPlt,
 						       Codeserver, Parent),
       dialyzer_callgraph:delete(Callgraph1),
       State#analysis_state{plt = NewPlt};
     succ_typings ->
-
       NoWarn = State#analysis_state.no_warn_unused,
       {BehavioursChk, _Known} = State#analysis_state.behaviours,
       DocPlt = State#analysis_state.doc_plt,

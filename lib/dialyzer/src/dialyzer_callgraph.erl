@@ -63,14 +63,6 @@
 	 get_behaviour_api_calls/1, put_diff_mods/2, put_fast_plt/2,
 	 get_fast_plt/1]).
 
-%-define(LOCAL_DEBUG,true).
-
--ifdef(LOCAL_DEBUG).
--define(ldebug(X__, Y__), io:format(X__, Y__)).
--else.
--define(ldebug(X__, Y__), ok).
--endif.
-
 -export_type([callgraph/0]).
 
 -include("dialyzer.hrl").
@@ -115,10 +107,10 @@
                     named_tables   = []            :: [string()],
                     race_detection = false         :: boolean(),
 		    beh_api_calls  = []            :: [{mfa(), mfa()}],
-		    diff_mods      = []            :: [_],
+		    diff_mods      = []            :: [atom()],
 		    depends_on     = dict:new()    :: dict(),
 		    is_dependent   = dict:new()    :: dict(),
-		    changed_funs   = dict:new()    :: dict(),
+		    changed_funs   = sets:new()    :: set(),
 		    fast_plt       = false         :: boolean()
 		   }).
 
@@ -337,9 +329,9 @@ fast_finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
 	       is_dependent = FunDependents,
 	       changed_funs = ChangedFuns}.
 
-slow_finalize(#callgraph{digraph = DG} = CG) ->
+slow_finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   DG1 = digraph_utils:condensation(DG),
-  PostOrder = digraph_finalize(DG1,[]),
+  PostOrder = digraph_finalize(DG1, DiffMods),
   digraph_delete(DG1),
   CG#callgraph{postorder = PostOrder}.
 
@@ -629,18 +621,25 @@ digraph_postorder(Digraph, LastModule, Acc, DiffMods) ->
   end.
 
 digraph_leaves(Digraph) ->
-  A =[V || V <- digraph:vertices(Digraph), digraph:out_degree(Digraph, V) =:= 0],
-  A.
+  [V || V <- digraph:vertices(Digraph), digraph:out_degree(Digraph, V) =:= 0].
 
 take_sccs_from_fresh_module(Leaves, DiffMods) ->
-  Query = [M || {M,_,_} <- lists:append(Leaves), lists:member(M, DiffMods)],
   NewModule =
-    case Query of
-      []     -> find_module(hd(Leaves));
-      [H|_T] -> H
+    case find_leaf_in_diff(Leaves, DiffMods) of
+      none   -> find_module(hd(Leaves));
+      {ok,H} -> H
     end,
-  {NewModule, 
-   [SCC || SCC <- Leaves, scc_belongs_to_module(SCC, NewModule)]}.
+  {NewModule, [SCC || SCC <- Leaves, scc_belongs_to_module(SCC, NewModule)]}.
+
+find_leaf_in_diff(_Leaves, []) ->
+  none;
+find_leaf_in_diff([Leaf|Leaves], DiffMods) ->
+  case [M || {M,_,_} <- Leaf, lists:member(M, DiffMods)] of
+    [H|_T] -> {ok, H};
+    []     -> find_leaf_in_diff(Leaves, DiffMods)
+  end;
+find_leaf_in_diff([], _DiffMods) ->
+  none.
 
 -spec scc_belongs_to_module(scc(), module()) -> boolean().
 
@@ -786,7 +785,7 @@ get_behaviour_api_calls(Callgraph) ->
 
 %-------------------------------------------------------------------------------
 
--spec put_diff_mods([_], callgraph()) -> callgraph().
+-spec put_diff_mods([atom()], callgraph()) -> callgraph().
 
 put_diff_mods(DiffMods, Callgraph) ->
   Callgraph#callgraph{diff_mods = DiffMods}.
@@ -813,42 +812,30 @@ dependencies(DG, DiffMods) ->
   DependentsDict = lists:foldl(fun dict_store/2, dict:new(), DependentsList),
   DiffF = [L || L <- F, {M,_,_} <- L, lists:member(M,DiffMods)],
   NeedF = needed_fixpoint(DiffF,DependsOnDict),
-  DifferFuns = lists:foldl(dict_store_value(differ), dict:new(), DiffF),
-  NeededFuns = lists:foldl(dict_store_value(needed), DifferFuns, NeedF),
+  DifferFuns = lists:foldl(fun sets:add_element/2, sets:new(), DiffF),
+  NeededFuns = lists:foldl(fun sets:add_element/2, DifferFuns, NeedF),
   {NeededFuns, DependsOnDict, DependentsDict}.
 
 dict_store({Key, Value}, Dict) ->
   dict:store(Key, Value, Dict).
 
-dict_store_value(Value) ->
-  fun (Key, Dict) -> dict:store(Key, Value, Dict) end.
-
 needed_fixpoint(DiffF, DependsOnDict) ->
-  sets:to_list(needed_fixpoint(DiffF, DependsOnDict, sets:new())).
+  needed_fixpoint(DiffF, DependsOnDict, sets:new(), 0).
 
-needed_fixpoint(Base, Dict, Set) ->
+needed_fixpoint(Base, Dict, Set, OldSize) ->
   NewBase = lists:append([dict:fetch(Q, Dict) || Q <- Base]),
-  NewSet = lists:foldl(fun sets:add_element/2,Set,NewBase),
-  case sets:size(NewSet) =:= sets:size(Set) of
-    true  -> NewSet;
-    false -> needed_fixpoint(NewBase, Dict, NewSet)
+  CleanBase = [Q || Q <- NewBase, not sets:is_element(Q, Set)],
+  NewSet = lists:foldl(fun sets:add_element/2,Set,CleanBase),
+  NewSize = sets:size(NewSet),
+  case NewSize =:= OldSize of
+    true  -> sets:to_list(Set);
+    false -> needed_fixpoint(CleanBase, Dict, NewSet, NewSize)
   end.
   
 -spec need_analysis(scc(), callgraph()) -> boolean().
 
 need_analysis(SCC, Callgraph) ->
-  ChangedFuns = Callgraph#callgraph.changed_funs,
-  case dict:find(SCC, ChangedFuns) of
-    {ok, differ} -> 
-      ?ldebug("\n has file that differs",[]),
-      true;
-    {ok, needed} ->   
-      ?ldebug("\n is needed by: ~p",[dict:fetch(SCC, Callgraph#callgraph.is_dependent)]),
-      true;
-    error ->
-      ?ldebug("\n skipped",[]),
-      false
-  end.
+  sets:is_element(SCC, Callgraph#callgraph.changed_funs).
 
 -spec changed(scc(), callgraph()) -> callgraph().
 
@@ -860,7 +847,8 @@ changed(SCC, Callgraph) ->
   DepDependenciesFun = 
     fun(V,L1) -> [dict:fetch(V, DependsOnDict)|L1] end,
   DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
-  NewChangedFuns = lists:foldl(dict_store_value(needed),ChangedFuns,DepDependencies),
+  NewChangedFuns = 
+    lists:foldl(fun sets:add_element/2,ChangedFuns,DepDependencies),
   Callgraph#callgraph{changed_funs = NewChangedFuns}.
 
 %-------------------------------------------------------------------------------

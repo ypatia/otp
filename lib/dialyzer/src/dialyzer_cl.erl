@@ -68,7 +68,7 @@ start(#options{analysis_type = AnalysisType} = Options) ->
 %%--------------------------------------------------------------------
 
 build_plt(Opts) ->
-  Opts1 = init_opts_for_build(Opts),
+  Opts1 = init_opts_for_build(Opts#options{fast_plt = false}),
   Files = get_files_from_opts(Opts1),
   Md5 = dialyzer_plt:compute_md5_from_files(Files),
   PltInfo = {Md5, dict:new()},
@@ -78,7 +78,7 @@ init_opts_for_build(Opts) ->
   case Opts#options.output_plt =:= none of
     true ->
       case Opts#options.init_plt of
-	none -> Opts#options{init_plt = none, output_plt = get_default_plt()};
+	none -> Opts#options{output_plt = get_default_plt()};
 	Plt  -> Opts#options{init_plt = none, output_plt = Plt}
       end;
     false -> Opts#options{init_plt = none}
@@ -178,7 +178,7 @@ plt_common(Opts, RemoveFiles, AddFiles) ->
 			       {Md5, ModDeps}),
 	  {?RET_NOTHING_SUSPICIOUS, []};
 	false ->
-	  DiffMods = [Mod||{differ,Mod} <- DiffMd5],
+	  DiffMods = [Mod||{_,Mod} <- DiffMd5],
 	  do_analysis(AnalFiles, Opts, Plt, {Md5, ModDeps1}, DiffMods)
       end;
     {error, no_such_file} ->

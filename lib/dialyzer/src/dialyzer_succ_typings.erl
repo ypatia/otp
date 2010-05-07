@@ -126,7 +126,8 @@ get_warnings(Callgraph, Plt, DocPlt, Codeserver,
 	     NoWarnUnused, Parent, BehavioursChk) ->
   InitState = #st{callgraph = Callgraph, codeserver = Codeserver,
 		  no_warn_unused = NoWarnUnused, parent = Parent, plt = Plt,
-		  old_plt = dialyzer_plt:new()},
+		  old_plt = dialyzer_plt:new(),
+		  fast_plt = dialyzer_callgraph:get_fast_plt(Callgraph)},
   NewState = get_refined_success_typings(InitState),
   Mods = dialyzer_callgraph:modules(NewState#st.callgraph),
   CWarns = dialyzer_contracts:get_invalid_contract_warnings(Mods, Codeserver,
@@ -313,7 +314,7 @@ has_escaping([Label|Rest], Callgraph) ->
     true -> true;
     false -> has_escaping(Rest, Callgraph)
   end;
-has_escaping([], Callgraph) ->
+has_escaping([], _Callgraph) ->
   false.
 
 analyze_scc(SCC, State, Fast) ->
@@ -343,14 +344,13 @@ fast_analyze_scc(SCC, #st{codeserver = Codeserver,
   Result =
     case dialyzer_callgraph:need_analysis(SCC, Callgraph) of
       false -> 
+	?ldebug("Skipped",[]),
 	OldTypes = get_old_succ_types(SCC, State#st.old_plt),
 	PltContracts = get_old_plt_contracts(SCC, State#st.old_plt),
-	State1 = State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
-	ContrPlt = dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
-	case OldTypes =:= [] of
-	  true -> ?ldebug(" nothing added",[]);
-	  false -> ?ldebug(" adding from old plt",[])
-	end,
+	State1 = 
+	  State#st{plt = dialyzer_plt:insert_list(State#st.plt, OldTypes)},
+	ContrPlt = 
+	  dialyzer_plt:insert_contract_list(State1#st.plt, PltContracts),
 	{State1#st{plt = ContrPlt}, []};
       true -> not_ready
     end,

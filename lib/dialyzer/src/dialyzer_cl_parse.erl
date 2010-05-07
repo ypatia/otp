@@ -68,8 +68,8 @@ cl(["-n"|T]) ->
 cl(["--no_check_plt"|T]) ->
   put(dialyzer_options_check_plt, false),
   cl(T);
-cl(["--fast_plt"|T]) ->
-  put(dialyzer_options_fast_plt, true),
+cl(["--slow_check_plt"|T]) ->
+  put(dialyzer_options_fast_plt, false),
   cl(T);
 cl(["-nn"|T]) ->
   cl(["--no_native"|T]);
@@ -324,7 +324,7 @@ help_message() ->
 		[files_or_dirs] [-r dirs] [--apps applications] [-o outfile]
 		[--build_plt] [--add_to_plt] [--remove_from_plt]
 		[--check_plt] [--no_check_plt] [--plt_info] [--get_warnings]
-                [--no_native]
+                [--no_native] [--slow_check_plt]
 Options:
   files_or_dirs (for backwards compatibility also as: -c files_or_dirs)
       Use Dialyzer from the command line to detect defects in the
@@ -395,8 +395,8 @@ Options:
   --check_plt
       Checks the plt for consistency and rebuilds it if it is not up-to-date.
       Actually, this option is of rare use as it is on by default.
-  --fast_plt
-      Speeds up the checking of the plt.
+  --slow_plt_check
+      Slows down the checking of the plt (not recommended).
   --no_check_plt (or -n)
       Skip the plt check when running Dialyzer. Useful when working with
       installed plts that never change.
