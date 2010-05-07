@@ -71,6 +71,8 @@
 -define(ldebug(X__, Y__), ok).
 -endif.
 
+-export_type([callgraph/0]).
+
 -include("dialyzer.hrl").
 
 %%----------------------------------------------------------------------
