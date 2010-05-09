@@ -499,7 +499,8 @@ rcv_and_send_ext_types(Parent) ->
   Self = self(),
   Self ! {Self, done},
   ExtTypes = rcv_ext_types(Self, []),
-  Parent ! {Self, ext_types, ExtTypes}.
+  Parent ! {Self, ext_types, ExtTypes},
+  ok.
 
 rcv_ext_types(Self, ExtTypes) ->
   receive
