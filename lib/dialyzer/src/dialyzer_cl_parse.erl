@@ -396,7 +396,7 @@ Options:
       Checks the plt for consistency and rebuilds it if it is not up-to-date.
       Actually, this option is of rare use as it is on by default.
   --slow_plt_check
-      Slows down the checking of the plt (not recommended).
+      Do not perform incremental check of the plt (for debugging purposes only).
   --no_check_plt (or -n)
       Skip the plt check when running Dialyzer. Useful when working with
       installed plts that never change.

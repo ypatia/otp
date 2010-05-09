@@ -178,7 +178,7 @@ plt_common(Opts, RemoveFiles, AddFiles) ->
 			       {Md5, ModDeps}),
 	  {?RET_NOTHING_SUSPICIOUS, []};
 	false ->
-	  DiffMods = [Mod||{_,Mod} <- DiffMd5],
+	  DiffMods = [Mod || {_, Mod} <- DiffMd5],
 	  do_analysis(AnalFiles, Opts, Plt, {Md5, ModDeps1}, DiffMods)
       end;
     {error, no_such_file} ->

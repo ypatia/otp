@@ -123,8 +123,7 @@
 		   behaviours_chk = false          :: boolean(),
 		   callgraph_file = ""             :: file:filename(),
 		   diff_mods      = []             :: [atom()],
-		   fast_plt       = false          :: boolean()
-		  }).
+		   fast_plt       = false          :: boolean()}).
 
 -record(options, {files           = []		   :: [file:filename()],
 		  files_rec       = []		   :: [file:filename()],
@@ -143,8 +142,7 @@
 		  output_format   = formatted      :: 'raw' | 'formatted',
 		  callgraph_file  = ""             :: file:filename(),
 		  check_plt       = true           :: boolean(),
-		  fast_plt        = true           :: boolean()
-		 }).
+		  fast_plt        = true           :: boolean()}).
 
 -record(contract, {contracts	  = []		   :: [contract_pair()],
 		   args		  = []		   :: [erl_types:erl_type()],

@@ -53,8 +53,7 @@
 	 take_scc/1,
 	 remove_external/1,
 	 to_dot/2,
-	 to_ps/3
-	]).
+	 to_ps/3]).
 
 -export([cleanup/1, get_digraph/1, get_named_tables/1, get_public_tables/1,
          get_race_code/1, get_race_detection/1, race_code_new/1,
@@ -111,8 +110,7 @@
 		    depends_on     = dict:new()    :: dict(),
 		    is_dependent   = dict:new()    :: dict(),
 		    changed_funs   = sets:new()    :: set(),
-		    fast_plt       = false         :: boolean()
-		   }).
+		    fast_plt       = false         :: boolean()}).
 
 %% Exported Types
 
@@ -662,7 +660,7 @@ digraph_finalize(DG, DiffMods) ->
 
 slow_digraph_finalize(DG) ->
   DG1 = digraph_utils:condensation(DG),
-  Postorder = digraph_postorder(DG1,[]),
+  Postorder = digraph_postorder(DG1, []),
   digraph:delete(DG1),
   Postorder.
 
@@ -825,7 +823,7 @@ needed_fixpoint(DiffF, DependsOnDict) ->
 needed_fixpoint(Base, Dict, Set, OldSize) ->
   NewBase = lists:append([dict:fetch(Q, Dict) || Q <- Base]),
   CleanBase = [Q || Q <- NewBase, not sets:is_element(Q, Set)],
-  NewSet = lists:foldl(fun sets:add_element/2,Set,CleanBase),
+  NewSet = lists:foldl(fun sets:add_element/2, Set, CleanBase),
   NewSize = sets:size(NewSet),
   case NewSize =:= OldSize of
     true  -> sets:to_list(Set);
@@ -844,11 +842,10 @@ changed(SCC, Callgraph) ->
   DependsOnDict = Callgraph#callgraph.depends_on,
   ChangedFuns = Callgraph#callgraph.changed_funs,
   {ok, SCCDependents} = dict:find(SCC,DependentsDict),
-  DepDependenciesFun =
-    fun(V,L1) -> [dict:fetch(V, DependsOnDict)|L1] end,
-  DepDependencies = lists:foldl(DepDependenciesFun,[],SCCDependents),
+  DepDependenciesFun = fun(V,L1) -> [dict:fetch(V, DependsOnDict)|L1] end,
+  DepDependencies = lists:foldl(DepDependenciesFun, [], SCCDependents),
   NewChangedFuns =
-    lists:foldl(fun sets:add_element/2,ChangedFuns,DepDependencies),
+    lists:foldl(fun sets:add_element/2, ChangedFuns, DepDependencies),
   Callgraph#callgraph{changed_funs = NewChangedFuns}.
 
 %-------------------------------------------------------------------------------

@@ -45,7 +45,7 @@
 	  old_plt                       :: dialyzer_plt:plt(),
 	  start_from     = byte_code    :: start_from(),
 	  use_contracts  = true         :: boolean(),
-	  behaviours     = {false, []}  :: {boolean(),[atom()]},
+	  behaviours     = {false, []}  :: {boolean(), [atom()]},
 	  diff_mods      = []           :: [atom()],
 	  fast_plt       = true         :: boolean()
 	 }).
@@ -129,10 +129,9 @@ analysis_start(Parent, Analysis) ->
 			  parent = Parent,
 			  start_from = Analysis#analysis.start_from,
 			  use_contracts = Analysis#analysis.use_contracts,
-			  behaviours = {Analysis#analysis.behaviours_chk,[]},
+			  behaviours = {Analysis#analysis.behaviours_chk, []},
 			  diff_mods = Analysis#analysis.diff_mods,
-			  fast_plt = Analysis#analysis.fast_plt
-			 },
+			  fast_plt = Analysis#analysis.fast_plt},
   Files = ordsets:from_list(Analysis#analysis.files),
   {Callgraph, NoWarn, TmpCServer0} = compile_and_store(Files, State),
   %% Remote type postprocessing
@@ -184,35 +183,34 @@ analysis_start(Parent, Analysis) ->
   send_codeserver_plt(Parent, CServer, State3#analysis_state.plt),
   send_analysis_done(Parent, Plt4, State3#analysis_state.doc_plt).
 
-analyze_callgraph(Callgraph, State) ->
-  Plt = State#analysis_state.plt,
-  Codeserver = State#analysis_state.codeserver,
-  Parent = State#analysis_state.parent,
-  case State#analysis_state.analysis_type of
+analyze_callgraph(Callgraph, #analysis_state{codeserver = CodeServer,
+					     analysis_type = Type,
+					     plt = Plt,
+					     old_plt = OldPlt,
+					     doc_plt = DocPlt,
+					     parent = Parent,
+					     fast_plt = Fast,
+					     diff_mods = DiffMods} = State) ->
+  case Type of
     plt_build ->
-      OldPlt = State#analysis_state.old_plt,
-      DiffMods = State#analysis_state.diff_mods,
       Callgraph0 = dialyzer_callgraph:put_diff_mods(DiffMods, Callgraph),
-      Callgraph1 =
-	dialyzer_callgraph:put_fast_plt(State#analysis_state.fast_plt,
-					Callgraph0),
+      Callgraph1 = dialyzer_callgraph:put_fast_plt(Fast, Callgraph0),
       Callgraph2 = dialyzer_callgraph:finalize(Callgraph1),
       NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph2, Plt, OldPlt,
-						       Codeserver, Parent),
+						       CodeServer, Parent),
       dialyzer_callgraph:delete(Callgraph1),
       State#analysis_state{plt = NewPlt};
     succ_typings ->
       NoWarn = State#analysis_state.no_warn_unused,
       {BehavioursChk, _Known} = State#analysis_state.behaviours,
-      DocPlt = State#analysis_state.doc_plt,
       Callgraph0 = dialyzer_callgraph:put_fast_plt(false, Callgraph),
       Callgraph1 = dialyzer_callgraph:finalize(Callgraph0),
       {Warnings, NewPlt, NewDocPlt} =
 	dialyzer_succ_typings:get_warnings(Callgraph1, Plt, DocPlt,
-					   Codeserver, NoWarn, Parent,
+					   CodeServer, NoWarn, Parent,
 					   BehavioursChk),
       dialyzer_callgraph:delete(Callgraph1),
-      send_warnings(State#analysis_state.parent, Warnings),
+      send_warnings(Parent, Warnings),
       State#analysis_state{plt = NewPlt, doc_plt = NewDocPlt}
   end.
 
@@ -280,7 +278,7 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
   if UnknownBehaviours =:= [] -> ok;
      true -> send_unknown_behaviours(Parent, UnknownBehaviours)
   end,
-  State1 = State#analysis_state{behaviours = {BehChk,KnownBehaviours}},
+  State1 = State#analysis_state{behaviours = {BehChk, KnownBehaviours}},
   NewCallgraph2 = cleanup_callgraph(State1, NewCServer, NewCallgraph1, Modules),
   {T3, _} = statistics(runtime),
   Msg2 = io_lib:format("done in ~.2f secs\n", [(T3-T2)/1000]),

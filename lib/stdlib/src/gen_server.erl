@@ -18,7 +18,6 @@
 %%
 -module(gen_server).
 
-
 %%% ---------------------------------------------------
 %%%
 %%% The idea behind THIS server is that the user module

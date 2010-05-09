@@ -1692,7 +1692,6 @@ compare_types(VarArgs, WarnVarArgs, RaceWarnTag, RaceVarMap) ->
             false ->
               compare_var_list(VA1, WVA1, RaceVarMap) orelse
                 compare_argtypes(VA2, WVA2)
-
           end
       end;
     ?WARN_WHEREIS_UNREGISTER ->

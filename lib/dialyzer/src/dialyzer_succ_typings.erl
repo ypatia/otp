@@ -305,8 +305,7 @@ find_succ_typings(#st{callgraph = Callgraph, parent = Parent, fast_plt = Fast} =
 check_fixpoint(Fixpoint, Callgraph, Fast) ->
   case Fast of
     false -> Fixpoint =:= [];
-    true  ->
-      has_escaping(Fixpoint, Callgraph)
+    true  -> has_escaping(Fixpoint, Callgraph)
   end.
 
 has_escaping([Label|Rest], Callgraph) ->
@@ -381,6 +380,7 @@ fast_analyze_scc(SCC, #st{codeserver = Codeserver,
 
 get_old_succ_types(SCC, Plt) ->
   get_old_succ_types(SCC, Plt, []).
+
 get_old_succ_types([SCC|Rest], Plt, Acc) ->
   case dialyzer_plt:lookup(Plt, SCC) of
     none ->
@@ -393,6 +393,7 @@ get_old_succ_types([], _Plt, Acc) ->
 
 get_old_plt_contracts(SCC, Plt) ->
   get_old_plt_contracts(SCC, Plt, []).
+
 get_old_plt_contracts([{_M,_F,_A} = SCC|Rest], Plt, Acc) ->
   case dialyzer_plt:lookup_contract(Plt, SCC) of
     {value, Contract} ->
