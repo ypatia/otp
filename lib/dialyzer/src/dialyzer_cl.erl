@@ -68,7 +68,7 @@ start(#options{analysis_type = AnalysisType} = Options) ->
 %%--------------------------------------------------------------------
 
 build_plt(Opts) ->
-  Opts1 = init_opts_for_build(Opts#options{fast_plt = false}),
+  Opts1 = init_opts_for_build(Opts),
   Files = get_files_from_opts(Opts1),
   Md5 = dialyzer_plt:compute_md5_from_files(Files),
   PltInfo = {Md5, dict:new()},
