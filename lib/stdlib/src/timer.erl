@@ -318,8 +318,8 @@ next_timeout() ->
     end.
 
 %% Help functions
-do_apply({M,F,A} = MFA) ->
-    case MFA of
+do_apply({M,F,A}) ->
+    case {M,F,A} of
 	{?MODULE, send, A} -> 
 	    %% If send op. send directly, (faster than spawn)
 	    catch send(A);
