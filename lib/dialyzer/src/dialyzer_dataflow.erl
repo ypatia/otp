@@ -3265,16 +3265,13 @@ get_file([_|Tail]) -> get_file(Tail).
 is_compiler_generated(Ann) ->
   lists:member(compiler_generated, Ann) orelse (get_line(Ann) < 1).
 
--spec format_args([term()], [erl_types:erl_type()], state()) ->
+-spec format_args([cerl:cerl()], [erl_types:erl_type()], state()) ->
   nonempty_string().
 
 format_args([], [], _State) ->
   "()";
 format_args(ArgList, TypeList, State) ->
   "(" ++ format_args_1(ArgList, TypeList, State) ++ ")".
-
--spec format_args_1([term(),...], [erl_types:erl_type(),...], state()) ->
-  string().
 
 format_args_1([Arg], [Type], State) ->
   format_arg(Arg) ++ format_type(Type, State);
