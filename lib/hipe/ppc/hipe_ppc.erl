@@ -231,9 +231,50 @@ label_label(#label{label=Label}) -> Label.
 %%% Load an integer constant into a register.
 mk_li(Dst, Value) -> mk_li(Dst, Value, []).
 
-mk_li(Dst, Value, Tail) ->
+mk_li(Dst, Value, Tail) ->   % Dst can be R0
   R0 = mk_temp(0, 'untagged'),
-  mk_addi(Dst, R0, Value, Tail).
+  %% Check if immediate can fit in the 32 bits, this is obviously a
+  %% sufficient check for PPC32
+  if Value >= -16#80000000,
+     Value =< 16#7FFFFFFF ->
+      mk_li32(Dst, R0, Value, Tail);
+     true ->
+      Highest = (Value bsr 48),              % Value@highest
+      Higher = (Value bsr 32) band 16#FFFF,  % Value@higher
+      High = (Value bsr 16) band 16#FFFF,    % Value@h
+      Low = Value band 16#FFFF,              % Value@l
+      LdLo =
+	case Low of
+	  0 -> Tail;
+	  _ -> [mk_alu('ori', Dst, Dst, mk_uimm16(Low)) | Tail]
+	end,
+      Ld32bits =
+	case High of
+	  0 -> LdLo;
+	  _ -> [mk_alu('oris', Dst, Dst, mk_uimm16(High)) | LdLo]
+	end,
+      [mk_alu('addis', Dst, R0, mk_simm16(Highest)),
+       mk_alu('ori', Dst, Dst, mk_uimm16(Higher)),
+       mk_alu('sldi', Dst, Dst, mk_uimm16(32)) | 
+       Ld32bits]
+  end.
+
+mk_li32(Dst, R0, Value, Tail) ->
+  case at_ha(Value) of
+    0 ->
+      %% Value[31:16] are the sign-extension of Value[15].
+      %% Use a single addi to load and sign-extend 16 bits.
+      [mk_alu('addi', Dst, R0, mk_simm16(at_l(Value))) | Tail];
+    _ ->
+      %% Use addis to load the high 16 bits, followed by an
+      %% optional ori to load non sign-extended low 16 bits.
+      High = simm16sext((Value bsr 16) band 16#FFFF),
+      [mk_alu('addis', Dst, R0, mk_simm16(High)) |
+       case (Value band 16#FFFF) of
+	 0 -> Tail;
+	 Low -> [mk_alu('ori', Dst, Dst, mk_uimm16(Low)) | Tail]
+       end]
+  end.
 
 mk_addi(Dst, R0, Value, Tail) ->
   Low = at_l(Value),
@@ -265,27 +306,6 @@ simm16sext(Value) ->
      true -> Value
   end.
 
-mk_li_new(Dst, Value, Tail) -> % Dst may be R0
-  R0 = mk_temp(0, 'untagged'),
-  case at_ha(Value) of
-    0 ->
-      %% Value[31:16] are the sign-extension of Value[15].
-      %% Use a single addi to load and sign-extend 16 bits.
-      [mk_alu('addi', Dst, R0, mk_simm16(at_l(Value))) |
-       Tail];
-    _ ->
-      %% Use addis to load the high 16 bits, followed by an
-      %% optional ori to load non sign-extended low 16 bits.
-      High = simm16sext((Value bsr 16) band 16#FFFF),
-      [mk_alu('addis', Dst, R0, mk_simm16(High)) |
-       case (Value band 16#FFFF) of
-	 0 -> Tail;
-	 Low ->
-	   [mk_alu('ori', Dst, Dst, mk_uimm16(Low)) |
-	    Tail]
-       end]
-  end.
-
 mk_load(LDop, Dst, Disp, Base) ->
   #load{ldop=LDop, dst=Dst, disp=Disp, base=Base}.
 
@@ -312,8 +332,8 @@ mk_load(LdOp, Dst, Offset, Base, Scratch, Rest) when is_integer(Offset) ->
 	     true -> mk_scratch(Scratch)
 	  end
 	end,
-      mk_li_new(Index, Offset,
-		[mk_loadx(LdxOp, Dst, Base, Index) | Rest])
+      mk_li(Index, Offset,
+	    [mk_loadx(LdxOp, Dst, Base, Index) | Rest])
   end.
 
 ldop_to_ldxop(LdOp) ->
@@ -420,8 +440,8 @@ mk_store(StOp, Src, Offset, Base, Scratch, Rest)when is_integer(Offset) ->
      true ->
       StxOp = stop_to_stxop(StOp),
       Index = mk_scratch(Scratch),
-      mk_li_new(Index, Offset,
-		[mk_storex(StxOp, Src, Base, Index) | Rest])
+      mk_li(Index, Offset,
+	    [mk_storex(StxOp, Src, Base, Index) | Rest])
   end.
 
 stop_to_stxop(StOp) ->
@@ -453,7 +473,7 @@ mk_fload(Dst, Offset, Base, Scratch) when is_integer(Offset) ->
       [mk_lfd(Dst, Offset, Base)];
      true ->
       Index = mk_scratch(Scratch),
-      mk_li_new(Index, Offset, [mk_lfdx(Dst, Base, Index)])
+      mk_li(Index, Offset, [mk_lfdx(Dst, Base, Index)])
   end.
 
 mk_stfd(Src, Disp, Base) -> #stfd{src=Src, disp=Disp, base=Base}.
@@ -463,7 +483,7 @@ mk_fstore(Src, Offset, Base, Scratch) when is_integer(Offset) ->
       [mk_stfd(Src, Offset, Base)];
      true ->
       Index = mk_scratch(Scratch),
-      mk_li_new(Index, Offset, [mk_stfdx(Src, Base, Index)])
+      mk_li(Index, Offset, [mk_stfdx(Src, Base, Index)])
   end.
 
 mk_fp_binary(FpBinOp, Dst, Src1, Src2) ->
