@@ -410,32 +410,23 @@ mk_alu_rr(Dst, Src1, RtlAluOp, Src2) ->
     'sub' -> % PPC weirdness
       [hipe_ppc:mk_alu('subf', Dst, Src2, Src1)];
     _ ->
-      case get(hipe_target_arch) of 
-	powerpc -> 
-	  AluOp =
-	    case RtlAluOp of
-	      'add' -> 'add';
-	      'mul' -> 'mullw';
-	      'or'  -> 'or';
-	      'and' -> 'and';
-	      'xor' -> 'xor';
-	      'sll' -> 'slw';
-	      'srl' -> 'srw';
-	      'sra' -> 'sraw'
-	    end;
-	ppc64 ->
-	   AluOp =
-	    case RtlAluOp of
-	      'add' -> 'add';
-	      'mul' -> 'mulld';
-	      'or'  -> 'or';
-	      'and' -> 'and';
-	      'xor' -> 'xor';
-	      'sll' -> 'sld';
-	      'srl' -> 'srd';
-	      'sra' -> 'srad'
-	    end
-      end,	  
+      AluOp =
+	case {get(hipe_target_arch), RtlAluOp} of
+	  {_, 'add'} -> 'add';
+	  {_, 'or'}  -> 'or';
+	  {_, 'and'} -> 'and';
+	  {_, 'xor'} -> 'xor';
+
+	  {powerpc, 'mul'} -> 'mullw';
+	  {powerpc, 'sll'} -> 'slw';
+	  {powerpc, 'srl'} -> 'srw';
+	  {powerpc, 'sra'} -> 'sraw';
+
+	  {ppc64, 'mul'} -> 'mulld';
+	  {ppc64, 'sll'} -> 'sld';
+	  {ppc64, 'srl'} -> 'srd';
+	  {ppc64, 'sra'} -> 'srad'
+	end,
       [hipe_ppc:mk_alu(AluOp, Dst, Src1, Src2)]
   end.
 
@@ -473,31 +464,22 @@ conv_alub(I, Map, Data) ->
   {I1 ++ I2, Map2, Data}.
 
 conv_alub_op(RtlAluOp) ->
-  case get(hipe_target_arch) of
-    powerpc ->
-      case RtlAluOp of
-	'add' -> 'add';
-	'sub' -> 'subf';	% XXX: must swap operands
-	'mul' -> 'mullw';
-	'or'  -> 'or';
-	'and' -> 'and';
-	'xor' -> 'xor';
-	'sll' -> 'slw';
-	'srl' -> 'srw';
-	'sra' -> 'sraw'
-      end;
-    ppc64 ->
-	case RtlAluOp of
-	'add' -> 'add';
-	'sub' -> 'subf';	% XXX: must swap operands
-	'mul' -> 'mulld';
-	'or'  -> 'or';
-	'and' -> 'and';
-	'xor' -> 'xor';
-	'sll' -> 'sld';
-	'srl' -> 'srd';
-	'sra' -> 'srad'
-      end
+  case {get(hipe_target_arch), RtlAluOp} of
+    {_, 'add'} -> 'add';
+    {_, 'sub'} -> 'subf';	% XXX: must swap operands
+    {_, 'or'}  -> 'or';
+    {_, 'and'} -> 'and';
+    {_, 'xor'} -> 'xor';
+
+    {powerpc, 'mul'} -> 'mullw';
+    {powerpc, 'sll'} -> 'slw';
+    {powerpc, 'srl'} -> 'srw';
+    {powerpc, 'sra'} -> 'sraw';
+
+    {ppc64, 'mul'} -> 'mulld';
+    {ppc64, 'sll'} -> 'sld';
+    {ppc64, 'srl'} -> 'srd';
+    {ppc64, 'sra'} -> 'srad'
   end.
       
 aluop_commutes(AluOp) ->
@@ -512,10 +494,10 @@ aluop_commutes(AluOp) ->
     'slw'   -> false;
     'srw'   -> false;
     'sraw'  -> false;
-    'mulld' -> true;  %%ppc64: probably not needed
-    'sld'   -> false; %%ppc64: probably not needed
-    'srd'   -> false; %%ppc64: probably not needed
-    'srad'  -> false  %%ppc64: probably not needed
+    'mulld' -> true;  %%ppc64
+    'sld'   -> false; %%ppc64
+    'srd'   -> false; %%ppc64
+    'srad'  -> false  %%ppc64
   end.
 	
 
