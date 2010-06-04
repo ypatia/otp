@@ -180,6 +180,7 @@ static ErtsCpuBindData *scheduler2cpu_map;
 erts_smp_rwmtx_t erts_cpu_bind_rwmtx;
 
 typedef enum {
+    ERTS_CPU_BIND_UNDEFINED,
     ERTS_CPU_BIND_SPREAD,
     ERTS_CPU_BIND_PROCESSOR_SPREAD,
     ERTS_CPU_BIND_THREAD_SPREAD,
@@ -189,6 +190,9 @@ typedef enum {
     ERTS_CPU_BIND_NO_SPREAD,
     ERTS_CPU_BIND_NONE
 } ErtsCpuBindOrder;
+
+#define ERTS_CPU_BIND_DEFAULT_BIND \
+  ERTS_CPU_BIND_THREAD_NO_NODE_PROCESSOR_SPREAD
 
 ErtsCpuBindOrder cpu_bind_order;
 
@@ -2078,11 +2082,13 @@ erts_init_scheduling(int mrq, int no_schedulers, int no_schedulers_online)
 
     erts_aligned_run_queues = erts_alloc(ERTS_ALC_T_RUNQS,
 					 (sizeof(ErtsAlignedRunQueue)*(n+1)));
-    if ((((UWord) erts_aligned_run_queues) & ERTS_CACHE_LINE_MASK) == 0)
+    if ((((UWord) erts_aligned_run_queues) & ERTS_CACHE_LINE_MASK) != 0)
 	erts_aligned_run_queues = ((ErtsAlignedRunQueue *)
 				   ((((UWord) erts_aligned_run_queues)
 				     & ~ERTS_CACHE_LINE_MASK)
 				    + ERTS_CACHE_LINE_SIZE));
+
+    ASSERT((((UWord) erts_aligned_run_queues) & ERTS_CACHE_LINE_MASK) == 0);
 
 #ifdef ERTS_SMP
     erts_smp_atomic_init(&no_empty_run_queues, 0);
@@ -2175,11 +2181,14 @@ erts_init_scheduling(int mrq, int no_schedulers, int no_schedulers_online)
     erts_aligned_scheduler_data = erts_alloc(ERTS_ALC_T_SCHDLR_DATA,
 					     (sizeof(ErtsAlignedSchedulerData)
 					      *(n+1)));
-    if ((((UWord) erts_aligned_scheduler_data) & ERTS_CACHE_LINE_MASK) == 0)
+    if ((((UWord) erts_aligned_scheduler_data) & ERTS_CACHE_LINE_MASK) != 0)
 	erts_aligned_scheduler_data = ((ErtsAlignedSchedulerData *)
 				       ((((UWord) erts_aligned_scheduler_data)
 					 & ~ERTS_CACHE_LINE_MASK)
 					+ ERTS_CACHE_LINE_SIZE));
+
+    ASSERT((((UWord) erts_aligned_scheduler_data) & ERTS_CACHE_LINE_MASK) == 0);
+
     for (ix = 0; ix < n; ix++) {
 	ErtsSchedulerData *esdp = ERTS_SCHEDULER_IX(ix);
 #ifdef ERTS_SMP
@@ -2769,7 +2778,7 @@ erts_block_multi_scheduling(Process *p, ErtsProcLocks plocks, int on, int all)
 	res = ERTS_SCHDLR_SSPND_YIELD_RESTART; /* Yield */
     }
     else if (on) { /* ------ BLOCK ------ */
-	if (erts_is_multi_scheduling_blocked()) {
+	if (schdlr_sspnd.msb.procs) {
 	    plp = proclist_create(p);
 	    plp->next = schdlr_sspnd.msb.procs;
 	    schdlr_sspnd.msb.procs = plp;
@@ -2975,8 +2984,11 @@ erts_dbg_multi_scheduling_return_trap(Process *p, Eterm return_value)
 int
 erts_is_multi_scheduling_blocked(void)
 {
-    return (erts_smp_atomic_read(&schdlr_sspnd.msb.ongoing)
-	    && erts_smp_atomic_read(&schdlr_sspnd.active) == 1);
+    int res;
+    erts_smp_mtx_lock(&schdlr_sspnd.mtx);
+    res = schdlr_sspnd.msb.procs != NULL;
+    erts_smp_mtx_unlock(&schdlr_sspnd.mtx);
+    return res;
 }
 
 Eterm
@@ -2985,7 +2997,7 @@ erts_multi_scheduling_blockers(Process *p)
     Eterm res = NIL;
 
     erts_smp_mtx_lock(&schdlr_sspnd.mtx);
-    if (erts_is_multi_scheduling_blocked()) {
+    if (schdlr_sspnd.msb.procs) {
 	Eterm *hp, *hp_end;
 	ErtsProcList *plp1, *plp2;
 	Uint max_size;
@@ -3503,14 +3515,15 @@ erts_init_scheduler_bind_type(char *how)
     if (!system_cpudata && !user_cpudata)
 	return ERTS_INIT_SCHED_BIND_TYPE_ERROR_NO_CPU_TOPOLOGY;
 
-    if (sys_strcmp(how, "s") == 0)
+    if (sys_strcmp(how, "db") == 0)
+	cpu_bind_order = ERTS_CPU_BIND_DEFAULT_BIND;
+    else if (sys_strcmp(how, "s") == 0)
 	cpu_bind_order = ERTS_CPU_BIND_SPREAD;
     else if (sys_strcmp(how, "ps") == 0)
 	cpu_bind_order = ERTS_CPU_BIND_PROCESSOR_SPREAD;
     else if (sys_strcmp(how, "ts") == 0)
 	cpu_bind_order = ERTS_CPU_BIND_THREAD_SPREAD;
-    else if (sys_strcmp(how, "db") == 0
-	     || sys_strcmp(how, "tnnps") == 0)
+    else if (sys_strcmp(how, "tnnps") == 0)
 	cpu_bind_order = ERTS_CPU_BIND_THREAD_NO_NODE_PROCESSOR_SPREAD;
     else if (sys_strcmp(how, "nnps") == 0)
 	cpu_bind_order = ERTS_CPU_BIND_NO_NODE_PROCESSOR_SPREAD;
@@ -4153,14 +4166,15 @@ erts_bind_schedulers(Process *c_p, Eterm how)
 
 	old_cpu_bind_order = cpu_bind_order;
 
-	if (ERTS_IS_ATOM_STR("spread", how))
+	if (ERTS_IS_ATOM_STR("default_bind", how))
+	    cpu_bind_order = ERTS_CPU_BIND_DEFAULT_BIND;
+	else if (ERTS_IS_ATOM_STR("spread", how))
 	    cpu_bind_order = ERTS_CPU_BIND_SPREAD;
 	else if (ERTS_IS_ATOM_STR("processor_spread", how))
 	    cpu_bind_order = ERTS_CPU_BIND_PROCESSOR_SPREAD;
 	else if (ERTS_IS_ATOM_STR("thread_spread", how))
 	    cpu_bind_order = ERTS_CPU_BIND_THREAD_SPREAD;
-	else if (ERTS_IS_ATOM_STR("default_bind", how)
-		 || ERTS_IS_ATOM_STR("thread_no_node_processor_spread", how))
+	else if (ERTS_IS_ATOM_STR("thread_no_node_processor_spread", how))
 	    cpu_bind_order = ERTS_CPU_BIND_THREAD_NO_NODE_PROCESSOR_SPREAD;
 	else if (ERTS_IS_ATOM_STR("no_node_processor_spread", how))
 	    cpu_bind_order = ERTS_CPU_BIND_NO_NODE_PROCESSOR_SPREAD;
@@ -4206,14 +4220,15 @@ erts_fake_scheduler_bindings(Process *p, Eterm how)
     int cpudata_size;
     Eterm res;
 
-    if (ERTS_IS_ATOM_STR("spread", how))
+    if (ERTS_IS_ATOM_STR("default_bind", how))
+	fake_cpu_bind_order = ERTS_CPU_BIND_DEFAULT_BIND;
+    else if (ERTS_IS_ATOM_STR("spread", how))
 	fake_cpu_bind_order = ERTS_CPU_BIND_SPREAD;
     else if (ERTS_IS_ATOM_STR("processor_spread", how))
 	fake_cpu_bind_order = ERTS_CPU_BIND_PROCESSOR_SPREAD;
     else if (ERTS_IS_ATOM_STR("thread_spread", how))
 	fake_cpu_bind_order = ERTS_CPU_BIND_THREAD_SPREAD;
-    else if (ERTS_IS_ATOM_STR("default_bind", how)
-	     || ERTS_IS_ATOM_STR("thread_no_node_processor_spread", how))
+    else if (ERTS_IS_ATOM_STR("thread_no_node_processor_spread", how))
 	fake_cpu_bind_order = ERTS_CPU_BIND_THREAD_NO_NODE_PROCESSOR_SPREAD;
     else if (ERTS_IS_ATOM_STR("no_node_processor_spread", how))
 	fake_cpu_bind_order = ERTS_CPU_BIND_NO_NODE_PROCESSOR_SPREAD;
@@ -4438,7 +4453,7 @@ early_cpu_bind_init(void)
 				(sizeof(erts_cpu_topology_t)
 				 * system_cpudata_size));
 
-    cpu_bind_order = ERTS_CPU_BIND_NONE;
+    cpu_bind_order = ERTS_CPU_BIND_UNDEFINED;
 
     if (!erts_get_cpu_topology(erts_cpuinfo, system_cpudata)
 	|| ERTS_INIT_CPU_TOPOLOGY_OK != verify_topology(system_cpudata,
@@ -4462,6 +4477,17 @@ late_cpu_bind_init(void)
     for (ix = 1; ix <= erts_no_schedulers; ix++) {
 	scheduler2cpu_map[ix].bind_id = -1;
 	scheduler2cpu_map[ix].bound_id = -1;
+    }
+
+    if (cpu_bind_order == ERTS_CPU_BIND_UNDEFINED) {
+	int ncpus = erts_get_cpu_configured(erts_cpuinfo);
+	if (ncpus < 1 || erts_no_schedulers < ncpus)
+	    cpu_bind_order = ERTS_CPU_BIND_NONE;
+	else
+	    cpu_bind_order = ((system_cpudata || user_cpudata)
+			      && (erts_bind_to_cpu(erts_cpuinfo, -1) != -ENOTSUP)
+			      ? ERTS_CPU_BIND_DEFAULT_BIND
+			      : ERTS_CPU_BIND_NONE);
     }
 
     if (cpu_bind_order != ERTS_CPU_BIND_NONE) {
@@ -7187,8 +7213,6 @@ erts_debug_verify_clean_empty_process(Process* p)
 void
 erts_cleanup_empty_process(Process* p)
 {
-    ErlHeapFragment* mbufp;
-
     /* We only check fields that are known to be used... */
 
     erts_cleanup_offheap(&p->off_heap);
@@ -7199,13 +7223,10 @@ erts_cleanup_empty_process(Process* p)
     p->off_heap.externals = NULL;
     p->off_heap.overhead = 0;
 
-    mbufp = p->mbuf;
-    while (mbufp) {
-	ErlHeapFragment *next = mbufp->next;
-	free_message_buffer(mbufp);
-	mbufp = next;
+    if (p->mbuf != NULL) {
+	free_message_buffer(p->mbuf);
+	p->mbuf = NULL;
     }
-    p->mbuf = NULL;
 #if defined(ERTS_ENABLE_LOCK_COUNT) && defined(ERTS_SMP)
     erts_lcnt_proc_lock_destroy(p);
 #endif
@@ -7221,7 +7242,6 @@ static void
 delete_process(Process* p)
 {
     ErlMessage* mp;
-    ErlHeapFragment* bp;
 
     VERBOSE(DEBUG_PROCESSES, ("Removing process: %T\n",p->id));
 
@@ -7271,11 +7291,8 @@ delete_process(Process* p)
     /*
      * Free all pending message buffers.
      */
-    bp = p->mbuf;
-    while (bp != NULL) {
-	ErlHeapFragment* next_bp = bp->next;
-	free_message_buffer(bp);
-	bp = next_bp;
+    if (p->mbuf != NULL) {	
+	free_message_buffer(p->mbuf);
     }
 
     erts_erase_dicts(p);
