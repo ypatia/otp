@@ -3367,7 +3367,7 @@ sequence([], [], _Delimiter) ->
   [];
 sequence([T], Acc, _Delimiter) ->
   lists:flatten(lists:reverse([T|Acc]));
-sequence([T|Ts], Acc, Delimiter) -> 
+sequence([T|Ts], Acc, Delimiter) ->
   sequence(Ts, [T ++ Delimiter|Acc], Delimiter).
 
 %%=============================================================================
