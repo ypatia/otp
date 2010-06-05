@@ -653,7 +653,7 @@ module_builtin_opaques(Module) ->
 %% Remote types: these types are used for preprocessing;
 %% they should never reach the analysis stage.
 
--spec t_remote(module(), atom(), [_]) -> erl_type().
+-spec t_remote(atom(), atom(), [erl_type()]) -> erl_type().
 
 t_remote(Mod, Name, Args) ->
   ?remote(set_singleton(#remote{mod = Mod, name = Name, args = Args})).
@@ -1607,7 +1607,7 @@ t_set() ->
 t_tid() ->
   t_opaque(ets, tid, [], t_integer()).
 
--spec all_opaque_builtins() -> [erl_type()].
+-spec all_opaque_builtins() -> [erl_type(),...].
 
 all_opaque_builtins() ->
   [t_array(), t_dict(), t_digraph(), t_gb_set(),
