@@ -87,14 +87,14 @@ translatable_behaviours(Tree) ->
 get_behaviour_apis(Behaviours) ->
   get_behaviour_apis(Behaviours, []).
 
--spec translate_behaviour_api_call(dialyzer_races:mfa_or_funlbl(), 
-				   [erl_types:erl_type()], 
+-spec translate_behaviour_api_call(dialyzer_races:mfa_or_funlbl(),
+				   [erl_types:erl_type()],
 				   [dialyzer_races:core_vars()],
-				   module(), 
-				   behaviour_api_dict()) -> 
-				      {dialyzer_races:mfa_or_funlbl(), 
-				       [erl_types:erl_type()], 
-				       [dialyzer_races:core_vars()]} 
+				   module(),
+				   behaviour_api_dict()) ->
+				      {dialyzer_races:mfa_or_funlbl(),
+				       [erl_types:erl_type()],
+				       [dialyzer_races:core_vars()]}
 					| 'plain_call'.
 
 translate_behaviour_api_call(_Fun, _ArgTypes, _Args, _Module, []) ->
@@ -116,7 +116,7 @@ translate_behaviour_api_call(_Fun, _ArgTypes, _Args, _Module, _BehApiInfo) ->
   plain_call.
 
 -spec translate_callgraph(behaviour_api_dict(), atom(),
-			  dialyzer_callgraph:callgraph()) -> 
+			  dialyzer_callgraph:callgraph()) ->
 			     dialyzer_callgraph:callgraph().
 
 translate_callgraph([{Behaviour,_}|Behaviours], Module, Callgraph) ->
