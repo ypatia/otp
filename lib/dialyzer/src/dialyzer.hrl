@@ -117,6 +117,7 @@
 		   files          = []		   :: [file:filename()],
 		   include_dirs	  = []		   :: [file:filename()],
 		   start_from     = byte_code	   :: start_from(),
+		   parallel_mode                   :: boolean(),
 		   plt                             :: dialyzer_plt:plt(),
 		   use_contracts  = true           :: boolean(),
 		   race_detection = false	   :: boolean(),
