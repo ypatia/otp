@@ -54,6 +54,7 @@ MODULES =  \
 	dialyzer_cl_parse \
 	dialyzer_codeserver \
 	dialyzer_contracts \
+	dialyzer_coordinator \
 	dialyzer_dataflow \
 	dialyzer_dep \
 	dialyzer_explanation \
@@ -134,6 +135,7 @@ $(EBIN)/dialyzer_cl.beam: dialyzer.hrl ../../kernel/include/file.hrl
 $(EBIN)/dialyzer_cl_parse.beam: dialyzer.hrl
 $(EBIN)/dialyzer_codeserver.beam: dialyzer.hrl
 $(EBIN)/dialyzer_contracts.beam: dialyzer.hrl
+$(EBIN)/dialyzer_coordinator.beam: dialyzer.hrl
 $(EBIN)/dialyzer_dataflow.beam: dialyzer.hrl
 $(EBIN)/dialyzer_dep.beam: dialyzer.hrl
 $(EBIN)/dialyzer_explanation.beam: dialyzer.hrl
