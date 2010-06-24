@@ -57,6 +57,29 @@
 -define(WARN_RACE_CONDITION, warn_race_condition).
 -define(WARN_BEHAVIOUR,warn_behaviour).
 
+%%--------------------------------------------------------------------
+%% Ets named tables
+%%--------------------------------------------------------------------
+
+-define(Codeserver, codeserver).
+-define(Cs_Records, cs_records).
+-define(Cs_Contracts, cs_contracts).
+-define(Cs_Exported_Types, cs_exported_types).
+-define(Callgraph, callgraph).
+-define(Cg_RecVarMap, cg_rec_var_map).
+-define(Cg_RevNameMap, cg_rev_name_map).
+-define(Cg_NameMap, cg_name_map).
+-define(Cg_Calls, cg_calls).
+-define(Plt_Info, plt_info).
+-define(Plt_Contracts, plt_contracts).
+-define(OldPlt_Info, old_plt_info).
+-define(OldPlt_Contracts, old_plt_contracts).
+-define(Changed_Funs, changed_funs).
+-define(Dependencies, dependencies).
+-define(Mfa_Codeserver, mfa_codeserver).
+-define(Mod_Codeserver, mod_codeserver).
+
+
 %%
 %% The following type has double role:
 %%   1. It is the set of warnings that will be collected.
@@ -143,7 +166,8 @@
 		  output_format   = formatted      :: 'raw' | 'formatted',
 		  callgraph_file  = ""             :: file:filename(),
 		  check_plt       = true           :: boolean(),
-		  fast_plt        = true           :: boolean()}).
+		  fast_plt        = true           :: boolean(),
+		  parallel_mode   = true           :: boolean()}).
 
 -record(contract, {contracts	  = []		   :: [contract_pair()],
 		   args		  = []		   :: [erl_types:erl_type()],
