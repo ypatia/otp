@@ -40,6 +40,7 @@
 	  doc_plt                       :: dialyzer_plt:plt(),
 	  include_dirs   = []           :: [file:filename()],
 	  no_warn_unused                :: set(),
+	  parallel_mode                 :: boolean(),
 	  parent                        :: pid(),
 	  plt                           :: dialyzer_plt:plt(),
 	  old_plt                       :: dialyzer_plt:plt(),
@@ -117,14 +118,16 @@ loop(#server_state{parent = Parent, legal_warnings = LegalWarnings} = State,
 %% The Analysis
 %%--------------------------------------------------------------------
 
-analysis_start(Parent, Analysis) ->
-  CServer = dialyzer_codeserver:new(),
+analysis_start(Parent, #analysis{race_detection = RaceDetection} = Analysis) ->
+  Parallel = Analysis#analysis.parallel_mode,
+  CServer = dialyzer_codeserver:new(Parallel),
   Plt = Analysis#analysis.plt,
   State = #analysis_state{codeserver = CServer,
 			  analysis_type = Analysis#analysis.type,
 			  defines = Analysis#analysis.defines,
 			  doc_plt = Analysis#analysis.doc_plt,
 			  include_dirs = Analysis#analysis.include_dirs,
+			  parallel_mode = Parallel,
 			  plt = Plt,
 			  parent = Parent,
 			  start_from = Analysis#analysis.start_from,
@@ -169,12 +172,24 @@ analysis_start(Parent, Analysis) ->
   AllNodes = dialyzer_callgraph:all_nodes(Callgraph),
   Plt1 = dialyzer_plt:delete_list(NewPlt1, AllNodes),
   Exports = dialyzer_codeserver:get_exports(NewCServer),
+  ?Changed_Funs = ets:new(?Changed_Funs, [public, named_table]),
+  ?Dependencies = ets:new(?Dependencies, [protected, named_table]),
   NewCallgraph =
-    case Analysis#analysis.race_detection of
-      true -> dialyzer_callgraph:put_race_detection(true, Callgraph);
+    case RaceDetection of
+      true ->
+	ets:new(cfgs, [named_table, public]),
+ 	public_tables = ets:new(public_tables,[public, named_table]),
+	named_tables = ets:new(named_tables,[public, named_table]),
+	dialyzer_callgraph:put_race_detection(true, Callgraph);
       false -> Callgraph
     end,
   State3 = analyze_callgraph(NewCallgraph, State2#analysis_state{plt = Plt1}),
+  case RaceDetection of
+    true -> ets:delete(cfgs);
+    false -> ok
+  end,
+  true = ets:delete(?Dependencies),
+  true = ets:delete(?Changed_Funs),
   rcv_and_send_ext_types(Parent),
   NonExports = sets:subtract(sets:from_list(AllNodes), Exports),
   NonExportsList = sets:to_list(NonExports),
@@ -185,6 +200,7 @@ analysis_start(Parent, Analysis) ->
 
 analyze_callgraph(Callgraph, #analysis_state{codeserver = CodeServer,
 					     analysis_type = Type,
+					     parallel_mode = Parallel,
 					     plt = Plt,
 					     old_plt = OldPlt,
 					     doc_plt = DocPlt,
@@ -201,7 +217,7 @@ analyze_callgraph(Callgraph, #analysis_state{codeserver = CodeServer,
       Callgraph1 = dialyzer_callgraph:put_fast_plt(Fast1, Callgraph0),
       Callgraph2 = dialyzer_callgraph:finalize(Callgraph1),
       NewPlt = dialyzer_succ_typings:analyze_callgraph(Callgraph2, Plt, OldPlt,
-						       CodeServer, Parent),
+						       CodeServer, Parent, Parallel),
       dialyzer_callgraph:delete(Callgraph1),
       State#analysis_state{plt = NewPlt};
     succ_typings ->
@@ -212,7 +228,7 @@ analyze_callgraph(Callgraph, #analysis_state{codeserver = CodeServer,
       {Warnings, NewPlt, NewDocPlt} =
 	dialyzer_succ_typings:get_warnings(Callgraph1, Plt, DocPlt,
 					   CodeServer, NoWarn, Parent,
-					   BehavioursChk),
+					   BehavioursChk, Parallel),
       dialyzer_callgraph:delete(Callgraph1),
       send_warnings(Parent, Warnings),
       State#analysis_state{plt = NewPlt, doc_plt = NewDocPlt}
@@ -225,6 +241,7 @@ analyze_callgraph(Callgraph, #analysis_state{codeserver = CodeServer,
 compile_and_store(Files, #analysis_state{codeserver = CServer,
 					 defines = Defs,
 					 include_dirs = Dirs,
+					 parallel_mode = Parallel,
 					 parent = Parent,
 					 use_contracts = UseContracts,
 					 start_from = StartFrom,
@@ -239,7 +256,7 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
 	  src_code ->
 	    fun(File, {TmpCG, TmpCServer, TmpFailed, TmpNoWarn, TmpMods}) ->
 		case compile_src(File, Includes, Defines, TmpCG,
-				 TmpCServer, UseContracts) of
+				 TmpCServer, UseContracts, Parallel) of
 		  {error, Reason} ->
 		    {TmpCG, TmpCServer, [{File, Reason}|TmpFailed], TmpNoWarn,
                      TmpMods};
@@ -250,7 +267,7 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
 	    end;
 	  byte_code ->
 	    fun(File, {TmpCG, TmpCServer, TmpFailed, TmpNoWarn, TmpMods}) ->
-		case compile_byte(File, TmpCG, TmpCServer, UseContracts) of
+		case compile_byte(File, TmpCG, TmpCServer, UseContracts, Parallel) of
 		  {error, Reason} ->
 		    {TmpCG, TmpCServer, [{File, Reason}|TmpFailed], TmpNoWarn,
                      TmpMods};
@@ -278,7 +295,7 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
   Msg1 = io_lib:format("done in ~.2f secs\nRemoving edges... ", [(T2-T1)/1000]),
   send_log(Parent, Msg1),
   {KnownBehaviours, UnknownBehaviours} =
-    dialyzer_behaviours:get_behaviours(Modules, NewCServer),
+    dialyzer_behaviours:get_behaviours(Modules, NewCServer, Parallel),
   if UnknownBehaviours =:= [] -> ok;
      true -> send_unknown_behaviours(Parent, UnknownBehaviours)
   end,
@@ -289,8 +306,8 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
   send_log(Parent, Msg2),
   {NewCallgraph2, sets:from_list(NoWarn), NewCServer}.
 
-cleanup_callgraph(#analysis_state{plt = InitPlt, parent = Parent,
-				  codeserver = CodeServer,
+cleanup_callgraph(#analysis_state{plt = InitPlt, parallel_mode = Parallel, 
+				  parent = Parent, codeserver = CodeServer,
 				  behaviours = {BehChk, KnownBehaviours}
 				 },
 		  CServer, Callgraph, Modules) ->
@@ -324,7 +341,7 @@ cleanup_callgraph(#analysis_state{plt = InitPlt, parent = Parent,
 		       not dialyzer_codeserver:is_exported(To, CServer)],
   case BadCalls1 ++ BadCalls2 of
     [] -> ok;
-    BadCalls -> send_bad_calls(Parent, BadCalls, CodeServer)
+    BadCalls -> send_bad_calls(Parent, BadCalls, CodeServer, Parallel)
   end,
   if RealExtCalls =:= [] -> ok;
      true ->
@@ -332,7 +349,8 @@ cleanup_callgraph(#analysis_state{plt = InitPlt, parent = Parent,
   end,
   Callgraph2.
 
-compile_src(File, Includes, Defines, Callgraph, CServer, UseContracts) ->
+compile_src(File, Includes, Defines, Callgraph, CServer, 
+	    UseContracts, Parallel) ->
   DefaultIncludes = default_includes(filename:dirname(File)),
   SrcCompOpts = dialyzer_utils:src_compiler_opts(),
   CompOpts = SrcCompOpts ++ Includes ++ Defines ++ DefaultIncludes,
@@ -358,16 +376,16 @@ compile_src(File, Includes, Defines, Callgraph, CServer, UseContracts) ->
 			dialyzer_codeserver:store_temp_contracts(Mod,
 								 SpecInfo,
 								 CServer2),
-		      store_core(Mod, Core, NoWarn, Callgraph, CServer3)
+		      store_core(Mod, Core, NoWarn, Callgraph, CServer3, Parallel)
 		  end;
 		false ->
-		  store_core(Mod, Core, NoWarn, Callgraph, CServer2)
+		  store_core(Mod, Core, NoWarn, Callgraph, CServer2, Parallel)
 	      end
 	  end
       end
   end.
 
-compile_byte(File, Callgraph, CServer, UseContracts) ->
+compile_byte(File, Callgraph, CServer, UseContracts, Parallel) ->
   case dialyzer_utils:get_abstract_code_from_beam(File) of
     error ->
       {error, "  Could not get abstract code for: " ++ File ++ "\n" ++
@@ -391,16 +409,16 @@ compile_byte(File, Callgraph, CServer, UseContracts) ->
 		      CServer2 =
 			dialyzer_codeserver:store_temp_contracts(Mod, SpecInfo,
 								 CServer1),
-		      store_core(Mod, Core, NoWarn, Callgraph, CServer2)
+		      store_core(Mod, Core, NoWarn, Callgraph, CServer2, Parallel)
 		  end;
 		false ->
-		  store_core(Mod, Core, NoWarn, Callgraph, CServer1)
+		  store_core(Mod, Core, NoWarn, Callgraph, CServer1, Parallel)
 	      end
 	  end
       end
   end.
 
-store_core(Mod, Core, NoWarn, Callgraph, CServer) ->
+store_core(Mod, Core, NoWarn, Callgraph, CServer, Parallel) ->
   Exp = get_exports_from_core(Core),
   OldExpTypes = dialyzer_codeserver:get_temp_exported_types(CServer),
   NewExpTypes = get_exported_types_from_core(Core),
@@ -409,7 +427,8 @@ store_core(Mod, Core, NoWarn, Callgraph, CServer) ->
   CServer2 = dialyzer_codeserver:insert_temp_exported_types(MergedExpTypes,
                                                             CServer1),
   {LabeledCore, CServer3} = label_core(Core, CServer2),
-  store_code_and_build_callgraph(Mod, LabeledCore, Callgraph, CServer3, NoWarn).
+  store_code_and_build_callgraph(Mod, LabeledCore, Callgraph, CServer3, 
+				 NoWarn, Parallel).
 
 abs_get_nowarn(Abs, M) ->
   [{M, F, A}
@@ -438,10 +457,11 @@ label_core(Core, CServer) ->
   {cerl:to_records(LabeledTree),
    dialyzer_codeserver:set_next_core_label(NewNextLabel, CServer)}.
 
-store_code_and_build_callgraph(Mod, Core, Callgraph, CServer, NoWarn) ->
+store_code_and_build_callgraph(Mod, Core, Callgraph, CServer, 
+			       NoWarn, Parallel) ->
   CoreTree = cerl:from_records(Core),
   NewCallgraph = dialyzer_callgraph:scan_core_tree(CoreTree, Callgraph),
-  CServer2 = dialyzer_codeserver:insert(Mod, CoreTree, CServer),
+  CServer2 = dialyzer_codeserver:insert(Mod, CoreTree, CServer, Parallel),
   {ok, NewCallgraph, NoWarn, CServer2, Mod}.
 
 %%--------------------------------------------------------------------
@@ -551,23 +571,24 @@ send_codeserver_plt(Parent, CServer, Plt ) ->
   Parent ! {self(), cserver, CServer, Plt},
   ok.
 
-send_bad_calls(Parent, BadCalls, CodeServer) ->
-  send_warnings(Parent, format_bad_calls(BadCalls, CodeServer, [])).
+send_bad_calls(Parent, BadCalls, CodeServer, Parallel) ->
+  send_warnings(Parent, format_bad_calls(BadCalls, CodeServer, Parallel, [])).
 
 send_mod_deps(Parent, ModuleDeps) ->
   Parent ! {self(), mod_deps, ModuleDeps},
   ok.
 
-format_bad_calls([{{_, _, _}, {_, module_info, A}}|Left], CodeServer, Acc)
-  when A =:= 0; A =:= 1 ->
-  format_bad_calls(Left, CodeServer, Acc);
-format_bad_calls([{FromMFA, {M, F, A} = To}|Left], CodeServer, Acc) ->
-  {_Var, FunCode} = dialyzer_codeserver:lookup_mfa_code(FromMFA, CodeServer),
+format_bad_calls([{{_, _, _}, {_, module_info, A}}|Left], CodeServer, 
+		 Parallel, Acc) when A =:= 0; A =:= 1 ->
+  format_bad_calls(Left, CodeServer, Parallel, Acc);
+format_bad_calls([{FromMFA, {M, F, A} = To}|Left], CodeServer, Parallel, Acc) ->
+  {_Var, FunCode} = dialyzer_codeserver:lookup_mfa_code(FromMFA, CodeServer, 
+							Parallel),
   Msg = {call_to_missing, [M, F, A]},
   FileLine = find_call_file_and_line(FunCode, To),
   NewAcc = [{?WARN_CALLGRAPH, FileLine, Msg}|Acc],
-  format_bad_calls(Left, CodeServer, NewAcc);
-format_bad_calls([], _CodeServer, Acc) ->
+  format_bad_calls(Left, CodeServer, Parallel, NewAcc);
+format_bad_calls([], _CodeServer, _Parallel, Acc) ->
   Acc.
 
 find_call_file_and_line(Tree, MFA) ->
