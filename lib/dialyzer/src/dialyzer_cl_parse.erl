@@ -70,6 +70,9 @@ cl(["-n"|T]) ->
 cl(["--no_check_plt"|T]) ->
   put(dialyzer_options_check_plt, false),
   cl(T);
+cl(["--no_parallel"|T]) ->
+  put(dialyzer_options_parallel, false),
+  cl(T);
 cl(["--slow_check_plt"|T]) ->
   put(dialyzer_options_fast_plt, false),
   cl(T);
@@ -242,6 +245,7 @@ init() ->
   put(dialyzer_output_format,     formatted),
   put(dialyzer_options_check_plt, DefaultOpts#options.check_plt),
   put(dialyzer_options_fast_plt, DefaultOpts#options.fast_plt),
+  put(dialyzer_options_parallel, DefaultOpts#options.parallel_mode),
   ok.
 
 append_defines([Def, Val]) ->
@@ -294,7 +298,8 @@ common_options() ->
    {use_spec, get(dialyzer_options_use_contracts)},
    {warnings, get(dialyzer_warnings)},
    {check_plt, get(dialyzer_options_check_plt)},
-   {fast_plt, get(dialyzer_options_fast_plt)}].
+   {fast_plt, get(dialyzer_options_fast_plt)},
+   {parallel_mode, get(dialyzer_options_parallel)}].
 
 %%-----------------------------------------------------------------------
 
@@ -326,7 +331,7 @@ help_message() ->
 		[files_or_dirs] [-r dirs] [--apps applications] [-o outfile]
 		[--build_plt] [--add_to_plt] [--remove_from_plt]
 		[--check_plt] [--no_check_plt] [--plt_info] [--get_warnings]
-                [--no_native] [--slow_check_plt]
+                [--no_native] [--slow_check_plt] [--no_parallel]
 Options:
   files_or_dirs (for backwards compatibility also as: -c files_or_dirs)
       Use Dialyzer from the command line to detect defects in the
@@ -399,7 +404,9 @@ Options:
       Actually, this option is of rare use as it is on by default.
   --slow_plt_check
       Do not perform incremental check of the plt (for debugging purposes only).
-  --no_check_plt (or -n)
+  --no_parallel
+      Perform serial instead of parallel analysis.
+   --no_check_plt (or -n)
       Skip the plt check when running Dialyzer. Useful when working with
       installed plts that never change.
   --plt_info
