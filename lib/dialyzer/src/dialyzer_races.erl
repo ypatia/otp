@@ -37,7 +37,7 @@
          get_curr_fun/1, get_curr_fun_args/1, get_new_table/1,
          get_race_analysis/1, get_race_list/1, get_race_list_size/1,
          let_tag_new/2, new/0, put_curr_fun/3, put_fun_args/2,
-         put_race_analysis/2, put_race_list/3]).
+         put_race_analysis/2, put_race_list/3, put_public_tables/1]).
 
 -export_type([races/0, mfa_or_funlbl/0, core_vars/0]).
 
@@ -287,9 +287,7 @@ race(State) ->
                  vars = Args, file_line = FileLine,
                  index = Index, fun_mfa = CurrFun,
                  fun_label = CurrFunLabel}|T] ->
-        Callgraph = dialyzer_dataflow:state__get_callgraph(State),
-        {ok, [_Args, Code]} =
-          dict:find(CurrFun, dialyzer_callgraph:get_race_code(Callgraph)),
+	[{CurrFun, _Args, Code}] = ets:lookup(cfgs, CurrFun),
         RaceList = lists:reverse(Code),
         RaceWarnTag =
           case Fun of
@@ -350,24 +348,26 @@ fixup_race_list(RaceWarnTag, WarnVarArgs, State) ->
   lists:usort(cleanup_dep_calls(DepList1 ++ DepList2)).
 
 fixup_race_list_helper(Parents, Calls, CurrFun, WarnVarArgs, RaceWarnTag,
-		       State) ->
+		              State) ->
+  Parallel = dialyzer_dataflow:state__get_mode(State),
   case Parents of
     [] -> [];
     [Head|Tail] ->
       Callgraph = dialyzer_dataflow:state__get_callgraph(State),
       Code =
-        case dict:find(Head, dialyzer_callgraph:get_race_code(Callgraph)) of
-          error -> [];
-          {ok, [_A, C]} -> C
+        case ets:lookup(cfgs, Head) of
+          [] -> [];
+          [{Head, _A, C}] -> C
         end,
-      {ok, FunLabel} = dialyzer_callgraph:lookup_label(Head, Callgraph),
+      {ok, FunLabel} = dialyzer_callgraph:lookup_label(Head, Callgraph, 
+						       Parallel),
       DepList1 =
         fixup_race_forward_pullout(Head, FunLabel, Calls, Code, [], CurrFun,
                                    WarnVarArgs, RaceWarnTag, dict:new(),
                                    [], [], [], 2 * ?local, State),
       DepList2 =
         fixup_race_list_helper(Tail, Calls, CurrFun, WarnVarArgs,
-			       RaceWarnTag, State),
+			              RaceWarnTag, State),
       DepList1 ++ DepList2
   end.
 
@@ -387,22 +387,23 @@ fixup_race_forward_pullout(CurrFun, CurrFunLabel, Calls, Code, RaceList,
     fixup_race_forward(CurrFun, CurrFunLabel, Calls, Code, RaceList,
                        InitFun, WarnVarArgs, RaceWarnTag, RaceVarMap,
                        FunDefVars, FunCallVars, FunArgTypes, NestingLevel,
-                       cleanup_race_code(State)),
+                       State),
   case NewCode of
     [] -> DepList;
     [#fun_call{caller = NewCurrFun, callee = Call, arg_types = FunTypes,
                vars = FunArgs}|Tail] ->
       Callgraph = dialyzer_dataflow:state__get_callgraph(State),
+      Parallel = dialyzer_dataflow:state__get_mode(State),
       OkCall = {ok, Call},
       {Name, Label} =
         case is_integer(Call) of
           true ->
-            case dialyzer_callgraph:lookup_name(Call, Callgraph) of
+            case dialyzer_callgraph:lookup_name(Call, Callgraph, Parallel) of
               error -> {OkCall, OkCall};
               N -> {N, OkCall}
             end;
           false ->
-            {OkCall, dialyzer_callgraph:lookup_label(Call, Callgraph)}
+            {OkCall, dialyzer_callgraph:lookup_label(Call, Callgraph, Parallel)}
         end,
       {NewCurrFun1, NewCurrFunLabel1, NewCalls1, NewCode1, NewRaceList1,
        NewRaceVarMap1, NewFunDefVars1, NewFunCallVars1, NewFunArgTypes1,
@@ -415,12 +416,12 @@ fixup_race_forward_pullout(CurrFun, CurrFunLabel, Calls, Code, RaceList,
           false ->
             {ok, Fun} = Name,
             {ok, Int} = Label,
-            case dict:find(Fun, dialyzer_callgraph:get_race_code(Callgraph)) of
-              error ->
+            case ets:lookup(cfgs, Fun) of
+	      [] ->
                 {NewCurrFun, NewCurrFunLabel, NewCalls, Tail, NewRaceList,
                  NewRaceVarMap, NewFunDefVars, NewFunCallVars, NewFunArgTypes,
                  NewNestingLevel};
-              {ok, [Args, CodeB]} ->
+	      [{Fun, Args, CodeB}] ->
                 Races = dialyzer_dataflow:state__get_races(State),
                 {RetCurrFun, RetCurrFunLabel, RetCalls, RetCode,
                  RetRaceList, RetRaceVarMap, RetFunDefVars, RetFunCallVars,
@@ -552,9 +553,9 @@ fixup_race_forward(CurrFun, CurrFunLabel, Calls, Code, RaceList,
             {[#curr_fun{status = in, var_map = RaceVarMap}|RaceList], [],
              NestingLevel + 1, false};
           RaceTag ->
-            PublicTables = dialyzer_callgraph:get_public_tables(Callgraph),
-            NamedTables = dialyzer_callgraph:get_named_tables(Callgraph),
-            WarnVarArgs1 =
+            PublicTables = get_public_tables(),
+            NamedTables = get_named_tables(),
+            WarnVarArgs1 = 
               var_type_analysis(FunDefVars, FunArgTypes, WarnVarArgs,
                                 RaceWarnTag, RaceVarMap,
                                 dialyzer_dataflow:state__records_only(State)),
@@ -589,8 +590,9 @@ fixup_race_forward(CurrFun, CurrFunLabel, Calls, Code, RaceList,
                                args = WarnVarArgs, var_map = RaceVarMap}],
                    NewDepList}
               end,
+	    Parallel = dialyzer_dataflow:state__get_mode(State),
             {NewHead ++ RaceList, NewDepList1, NestingLevel,
-             is_last_race(RaceTag, InitFun, Tail, Callgraph)}
+             is_last_race(RaceTag, InitFun, Tail, Callgraph, Parallel)}
         end,
       {NewCurrFun, NewCurrFunLabel, NewCode, NewRaceList, NewRaceVarMap,
        NewFunDefVars, NewFunCallVars, NewFunArgTypes, NewNestingLevel,
@@ -1194,7 +1196,7 @@ are_bound_vars(Vars1, Vars2, RaceVarMap) ->
       end
   end.
 
-callgraph__renew_tables(Table, Callgraph) ->
+renew_tables(Table) ->
   case Table of
     {named, NameLabel, Names} ->
       PTablesToAdd =
@@ -1203,15 +1205,31 @@ callgraph__renew_tables(Table, Callgraph) ->
           _Other -> [NameLabel]
         end,
       NamesToAdd = filter_named_tables(Names),
-      PTables = dialyzer_callgraph:get_public_tables(Callgraph),
-      NTables = dialyzer_callgraph:get_named_tables(Callgraph),
-      dialyzer_callgraph:put_public_tables(
-        lists:usort(PTablesToAdd ++ PTables),
-        dialyzer_callgraph:put_named_tables(
-        NamesToAdd ++ NTables, Callgraph));
+      true = put_public_tables(PTablesToAdd),
+      true = put_named_tables(NamesToAdd);
     _Other ->
-      Callgraph
+      ok
   end.
+
+-spec get_named_tables() ->  [string()].
+
+get_named_tables() ->
+  [NTable || {NTable,_} <- ets:tab2list(named_tables)].
+
+-spec get_public_tables() -> [label()].
+
+get_public_tables() ->
+  [PTable || {PTable,_} <- ets:tab2list(public_tables)].
+
+-spec put_named_tables([string()]) -> 'true'.
+
+put_named_tables(NamedTables) ->
+  true = ets:insert(named_tables, [{NTable, none} || NTable <- NamedTables]).
+
+-spec put_public_tables([label()]) -> 'true'.
+
+put_public_tables(PublicTables) ->
+  true = ets:insert(public_tables, [{PTable, none} || PTable <- PublicTables]).
 
 cleanup_clause_code(#curr_fun{mfa = CurrFun} = CurrTuple, Code,
                     NestingLevel, LocalNestingLevel) ->
@@ -1257,11 +1275,6 @@ cleanup_dep_calls(DepList) ->
                  vars = Vars, state = State, file_line = FileLine}|
        cleanup_dep_calls(T)]
   end.
-
-cleanup_race_code(State) ->
-  Callgraph = dialyzer_dataflow:state__get_callgraph(State),
-  dialyzer_dataflow:state__put_callgraph(
-    dialyzer_callgraph:race_code_new(Callgraph), State).
 
 filter_named_tables(NamesList) ->
   case NamesList of
@@ -1345,7 +1358,7 @@ fixup_all_calls(CurrFun, NextFun, NextFunLabel, Args, CodeToReplace,
       NewCode ++ RetCode
   end.
 
-is_last_race(RaceTag, InitFun, Code, Callgraph) ->
+is_last_race(RaceTag, InitFun, Code, Callgraph, Parallel) ->
   case Code of
     [] -> true;
     [Head|Tail] ->
@@ -1355,7 +1368,7 @@ is_last_race(RaceTag, InitFun, Code, Callgraph) ->
           FunName =
             case is_integer(Fun) of
               true ->
-                case dialyzer_callgraph:lookup_name(Fun, Callgraph) of
+                case dialyzer_callgraph:lookup_name(Fun, Callgraph, Parallel) of
                   error -> Fun;
                   {ok, Name} -> Name
                 end;
@@ -1363,11 +1376,11 @@ is_last_race(RaceTag, InitFun, Code, Callgraph) ->
             end,
           Digraph = dialyzer_callgraph:get_digraph(Callgraph),
           case FunName =:= InitFun orelse
-               digraph:get_path(Digraph, FunName, InitFun) of
-            false -> is_last_race(RaceTag, InitFun, Tail, Callgraph);
+	    digraph:get_path(Digraph, FunName, InitFun) of
+            false -> is_last_race(RaceTag, InitFun, Tail, Callgraph, Parallel);
             _Vertices -> false
           end;
-        _Other -> is_last_race(RaceTag, InitFun, Tail, Callgraph)
+        _Other -> is_last_race(RaceTag, InitFun, Tail, Callgraph, Parallel)
       end
   end.
 
@@ -1536,15 +1549,13 @@ state__renew_race_tags(RaceTags, State) ->
   dialyzer_dataflow:state__put_races(renew_race_tags(RaceTags, Races), State).
 
 state__renew_info(RaceList, RaceListSize, RaceTags, Table, State) ->
-  Callgraph = dialyzer_dataflow:state__get_callgraph(State),
   Races = dialyzer_dataflow:state__get_races(State),
-  dialyzer_dataflow:state__put_callgraph(
-    callgraph__renew_tables(Table, Callgraph),
-    dialyzer_dataflow:state__put_races(
-      renew_table(Table,
-      renew_race_list(RaceList,
-      renew_race_list_size(RaceListSize,
-      renew_race_tags(RaceTags, Races)))), State)).
+  renew_tables(Table),
+  dialyzer_dataflow:state__put_races(
+    renew_table(Table,
+    renew_race_list(RaceList,
+    renew_race_list_size(RaceListSize,
+    renew_race_tags(RaceTags, Races)))), State).
 
 %%% ===========================================================================
 %%%
