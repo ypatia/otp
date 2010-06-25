@@ -28,7 +28,7 @@
 
 -module(dialyzer_typesig).
 
--export([analyze_scc/5]).
+-export([analyze_scc/7]).
 -export([get_safe_underapprox/2]).
 
 -import(erl_types,
@@ -97,10 +97,12 @@
 		fun_arities   = dict:new() :: dict(),
 		in_match      = false      :: boolean(),
 		in_guard      = false      :: boolean(),
+		mfa_list                   :: [mfa()],
 		module                     :: module(),
 		name_map      = dict:new() :: dict(),
 		next_label                 :: label(),
 		non_self_recs = []         :: [label()],
+		parallel                   :: boolean(),
 		plt                        :: dialyzer_plt:plt(),
 		prop_types    = dict:new() :: dict(),
 		records       = dict:new() :: dict(),
@@ -150,12 +152,14 @@
 %%-----------------------------------------------------------------------------
 
 -spec analyze_scc(typesig_scc(), label(),
-		  dialyzer_callgraph:callgraph(),
-		  dialyzer_plt:plt(), dict()) -> dict().
+		  dialyzer_callgraph:callgraph() | 'undefined',
+		  dialyzer_plt:plt() | 'undefined',
+		  dict(), [mfa()], boolean()) -> dict().
 
-analyze_scc(SCC, NextLabel, CallGraph, Plt, PropTypes) ->
+analyze_scc(SCC, NextLabel, CallGraph, Plt, PropTypes, SCC_MFAs, Parallel) ->
   assert_format_of_scc(SCC),
-  State1 = new_state(SCC, NextLabel, CallGraph, Plt, PropTypes),
+  State1 = new_state(SCC, NextLabel, CallGraph, Plt, PropTypes, 
+		     SCC_MFAs, Parallel),
   DefSet = add_def_list([Var || {_MFA, {Var, _Fun}, _Rec} <- SCC], sets:new()),
   State2 = traverse_scc(SCC, DefSet, State1),
   State3 = state__finalize(State2),
@@ -638,21 +642,30 @@ handle_call(Call, DefinedVars, State) ->
       {state__store_conj_lists(MF, sub, [t_module(), t_atom()], State1), Dst}
   end.
 
-get_plt_constr(MFA, Dst, ArgVars, State) ->
-  Plt = state__plt(State),
-  PltRes = dialyzer_plt:lookup(Plt, MFA),
+get_plt_constr(MFA, Dst, ArgVars, #state{mfa_list = MFA_List, 
+					 parallel = Parallel, plt = Plt} = State) ->
+  PltRes = dialyzer_plt:lookup(Plt, MFA, Parallel),
   Opaques = State#state.opaques,
   Module = State#state.module,
   {FunModule, _, _} = MFA,
-  case dialyzer_plt:lookup_contract(Plt, MFA) of
-    none ->
+  case lists:member(MFA, MFA_List) of
+    true ->
       case PltRes of
 	none -> State;
 	{value, {PltRetType, PltArgTypes}} ->
 	  state__store_conj_lists([Dst|ArgVars], sub,
 				  [PltRetType|PltArgTypes], State)
       end;
-    {value, #contract{args = GenArgs} = C} ->
+    false ->
+      case dialyzer_plt:lookup_contract(Plt, MFA, Parallel) of
+	none ->
+	  case PltRes of
+	    none -> State;
+	    {value, {PltRetType, PltArgTypes}} ->
+	      state__store_conj_lists([Dst|ArgVars], sub, 
+				      [PltRetType|PltArgTypes], State)
+	  end;
+	 {value, #contract{args = GenArgs} = C} ->
       {RetType, ArgCs} =
 	case PltRes of
 	  none ->
@@ -677,7 +690,8 @@ get_plt_constr(MFA, Dst, ArgVars, State) ->
 	       end, ArgVars),
 	     [t_inf(X, Y, opaque) || {X, Y} <- lists:zip(GenArgs, PltArgTypes)]}
 	end,
-      state__store_conj_lists([Dst|ArgVars], sub, [RetType|ArgCs], State)
+	  state__store_conj_lists([Dst|ArgVars], sub, [RetType|ArgCs], State)
+      end
   end.
 
 filter_match_fail([Clause] = Cls) ->
@@ -2068,11 +2082,12 @@ mk_var_no_lit_list(List) ->
 %%
 %% ============================================================================
 
-new_state(SCC0, NextLabel, CallGraph, Plt, PropTypes) ->
+new_state(SCC0, NextLabel, CallGraph, Plt, PropTypes, SCC_MFAs, Parallel) ->
   NameMap = dict:from_list([{MFA, Var} || {MFA, {Var, _Fun}, _Rec} <- SCC0]),
   SCC = [mk_var(Fun) || {_MFA, {_Var, Fun}, _Rec} <- SCC0],
-  #state{callgraph = CallGraph, name_map = NameMap, next_label = NextLabel,
-	 prop_types = PropTypes, plt = Plt, scc = ordsets:from_list(SCC)}.
+  #state{callgraph = CallGraph, name_map = NameMap, next_label = NextLabel, 
+	 parallel = Parallel, plt = Plt, prop_types = PropTypes, 
+	 scc = ordsets:from_list(SCC), mfa_list = SCC_MFAs}.
 
 state__set_rec_dict(State, RecDict) ->
   State#state{records = RecDict}.
@@ -2123,20 +2138,22 @@ state__store_fun_arity(Tree, #state{fun_arities = Map} = State) ->
 state__fun_arity(Id, #state{fun_arities = Map}) ->
   dict:fetch(Id, Map).
 
-state__lookup_undef_var(Tree, #state{callgraph = CG, plt = Plt}) ->
+state__lookup_undef_var(Tree, #state{callgraph = CG, parallel = Parallel,
+				     plt = Plt}) ->
   Label = cerl_trees:get_label(Tree),
-  case dialyzer_callgraph:lookup_rec_var(Label, CG) of
+  case dialyzer_callgraph:lookup_rec_var(Label, CG, Parallel) of
     error -> error;
     {ok, MFA} ->
-      case dialyzer_plt:lookup(Plt, MFA) of
+      case dialyzer_plt:lookup(Plt, MFA, Parallel) of
 	none -> error;
 	{value, {RetType, ArgTypes}} -> {ok, t_fun(ArgTypes, RetType)}
       end
   end.
 
-state__lookup_apply(Tree, #state{callgraph = Callgraph}) ->
+state__lookup_apply(Tree, #state{callgraph = Callgraph, 
+				 parallel = Parallel}) ->
   Apply = cerl_trees:get_label(Tree),
-  case dialyzer_callgraph:lookup_call_site(Apply, Callgraph) of
+  case dialyzer_callgraph:lookup_call_site(Apply, Callgraph, Parallel) of
     error ->
       unknown;
     {ok, List} ->
@@ -2146,8 +2163,10 @@ state__lookup_apply(Tree, #state{callgraph = Callgraph}) ->
       end
   end.
 
-get_apply_constr(FunLabels, Dst, ArgTypes, #state{callgraph = CG} = State) ->
-  MFAs = [dialyzer_callgraph:lookup_name(Label, CG) || Label <- FunLabels],
+get_apply_constr(FunLabels, Dst, ArgTypes, 
+		 #state{callgraph = CG, parallel = Parallel} = State) ->
+  MFAs = [dialyzer_callgraph:lookup_name(Label, CG, Parallel) || 
+	   Label <- FunLabels],
   case lists:member(error, MFAs) of
     true -> error;
     false ->
@@ -2254,10 +2273,11 @@ state__get_cs(Var, #state{cmap = Dict}) ->
 state__mark_as_non_self_rec(SCC, #state{non_self_recs = NS} = State) ->
   State#state{non_self_recs = ordsets:union(NS, ordsets:from_list(SCC))}.
 
-state__is_self_rec(Fun, #state{callgraph = CallGraph, non_self_recs = NS}) ->
+state__is_self_rec(Fun, #state{callgraph = CallGraph, non_self_recs = NS,
+			       parallel = Parallel}) ->
   case ordsets:is_element(Fun, NS) of
     true -> false;
-    false -> dialyzer_callgraph:is_self_rec(t_var_name(Fun), CallGraph)
+    false -> dialyzer_callgraph:is_self_rec(t_var_name(Fun), CallGraph, Parallel)
   end.
 
 state__store_funs(Vars0, Funs0, #state{fun_map = Map} = State) ->
