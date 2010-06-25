@@ -39,20 +39,29 @@
 	 delete_module/2,
 	 included_files/1,
 	 from_file/1,
+	 get_contracts/1,
 	 get_default_plt/0,
+	 get_info/1,
 	 get_types/1,
          get_exported_types/1,
-	 %% insert/3,
 	 insert_list/2,
+	 insert_list/3,
 	 insert_contract_list/2,
+	 insert_contract_list/3,
 	 insert_types/2,
          insert_exported_types/2,
 	 lookup/2,
+	 lookup/3,
+	 lookup_old/3,
 	 lookup_contract/2,
+	 lookup_contract/3,
+	 lookup_old_contract/3,
 	 lookup_module/2,
 	 merge_plts/1,
 	 new/0,
 	 plt_and_info_from_file/1,
+	 set_contracts/2,
+	 set_info/2,
 	 get_specs/1,
 	 get_specs/4,
 	 to_file/4
@@ -121,10 +130,28 @@ delete_list(#plt{info = Info, types = Types, contracts = Contracts,
        contracts = table_delete_list(Contracts, List),
        exported_types = ExpTypes}.
 
+-spec insert_contract_list(plt() | 'undefined', 
+			   dialyzer_contracts:plt_contracts(), boolean()) ->
+			      plt() | 'true'.
+
+insert_contract_list(PLT, List, false) ->
+ insert_contract_list(PLT, List);
+insert_contract_list(_PLT, List, true) ->
+   ets:insert(?Plt_Contracts, List).
+
 -spec insert_contract_list(plt(), dialyzer_contracts:plt_contracts()) -> plt().
 
 insert_contract_list(#plt{contracts = Contracts} = PLT, List) ->
   PLT#plt{contracts = table_insert_list(Contracts, List)}.
+
+-spec lookup_contract(plt() | 'undefined', mfa_patt(), boolean()) -> 
+			 'none' | {'value', #contract{}}.
+
+lookup_contract(_Plt, {M, F, _} = MFA, true) when is_atom(M), is_atom(F) ->
+  ets_table_lookup(?Plt_Contracts, MFA);
+lookup_contract(#plt{contracts = Contracts},
+		{M, F, _} = MFA, false) when is_atom(M), is_atom(F) ->
+  table_lookup(Contracts, MFA).
 
 -spec lookup_contract(plt(), mfa_patt()) -> 'none' | {'value', #contract{}}.
 
@@ -132,15 +159,18 @@ lookup_contract(#plt{contracts = Contracts},
 		{M, F, _} = MFA) when is_atom(M), is_atom(F) ->
   table_lookup(Contracts, MFA).
 
+-spec lookup_old_contract(plt() | 'undefined', mfa_patt(), boolean()) -> 
+			     'none' | {'value', #contract{}}.
+
+lookup_old_contract(Plt, MFA, false) ->
+  lookup_contract(Plt, MFA);
+lookup_old_contract(_Plt, {M, F, _} = MFA, true) when is_atom(M), is_atom(F) ->
+  ets_table_lookup(?OldPlt_Contracts, MFA).
+
 -spec delete_contract_list(plt(), [mfa()]) -> plt().
 
 delete_contract_list(#plt{contracts = Contracts} = PLT, List) ->
   PLT#plt{contracts = table_delete_list(Contracts, List)}.
-
-%% -spec insert(plt(), mfa() | integer(), {_, _}) -> plt().
-%%
-%% insert(#plt{info = Info} = PLT, Id, Types) ->
-%%   PLT#plt{info = table_insert(Info, Id, Types)}.
 
 -type ret_args_types() :: {erl_types:erl_type(), [erl_types:erl_type()]}.
 
@@ -149,6 +179,24 @@ delete_contract_list(#plt{contracts = Contracts} = PLT, List) ->
 insert_list(#plt{info = Info} = PLT, List) ->
   PLT#plt{info = table_insert_list(Info, List)}.
 
+-spec insert_list(plt() | 'undefined', [{mfa() | integer(), ret_args_types()}], 
+		  boolean()) -> plt() | 'true'.
+
+insert_list(PLT, List ,false) ->
+  insert_list(PLT, List);
+insert_list(_PLT, List, true) ->
+  true = ets:insert(?Plt_Info, List). 
+
+-spec lookup(plt() | 'undefined', integer() | mfa_patt(), boolean()) ->
+        'none' | {'value', ret_args_types()}.
+
+lookup(Plt, MfaOrLabel, false) ->
+  lookup(Plt, MfaOrLabel);
+lookup(_Plt, {M, F, _} = MFA, true) when is_atom(M), is_atom(F) ->
+  ets_table_lookup(?Plt_Info, MFA);
+lookup(_Plt, Label, true) when is_integer(Label) ->
+  ets_table_lookup(?Plt_Info, Label).
+
 -spec lookup(plt(), integer() | mfa_patt()) ->
         'none' | {'value', ret_args_types()}.
 
@@ -156,6 +204,16 @@ lookup(#plt{info = Info}, {M, F, _} = MFA) when is_atom(M), is_atom(F) ->
   table_lookup(Info, MFA);
 lookup(#plt{info = Info}, Label) when is_integer(Label) ->
   table_lookup(Info, Label).
+
+-spec lookup_old(plt() | 'undefined', integer() | mfa_patt(), boolean()) ->
+        'none' | {'value', ret_args_types()}.
+
+lookup_old(Plt, MfaOrLabel, false) ->
+  lookup(Plt, MfaOrLabel);
+lookup_old(_Plt, {M, F, _} = MFA, true) when is_atom(M), is_atom(F) ->
+  ets_table_lookup(?OldPlt_Info, MFA);
+lookup_old(_Plt, Label, true) when is_integer(Label) ->
+  ets_table_lookup(?OldPlt_Info, Label).
 
 -spec insert_types(plt(), dict()) -> plt().
 
@@ -167,10 +225,30 @@ insert_types(PLT, Rec) ->
 insert_exported_types(PLT, Set) ->
   PLT#plt{exported_types = Set}.
 
+-spec get_contracts(plt()) -> dict().
+
+get_contracts(#plt{contracts = Contracts}) ->
+  Contracts.
+
+-spec get_info(plt()) -> dict().
+
+get_info(#plt{info = Info}) ->
+  Info.
+
 -spec get_types(plt()) -> dict().
 
 get_types(#plt{types = Types}) ->
   Types.
+
+-spec set_contracts(plt(), dict()) -> plt().
+
+set_contracts(PLT, Contracts) ->
+  PLT#plt{contracts = Contracts}.
+
+-spec set_info(plt(), dict()) -> plt().
+
+set_info(PLT, Info) ->
+  PLT#plt{info = Info}.
 
 -spec get_exported_types(plt()) -> set().
 
@@ -527,6 +605,12 @@ table_lookup(Plt, Obj) ->
   case dict:find(Obj, Plt) of
     error -> none;
     {ok, Val} -> {value, Val}
+  end.
+
+ets_table_lookup(Plt, Obj) ->
+  case ets:lookup(Plt, Obj) of
+    [] -> none;
+    [{_, Val}] -> {value, Val}
   end.
 
 table_lookup_module(Plt, Mod) ->
