@@ -29,41 +29,55 @@
 
 -export([add_edges/2,
 	 all_nodes/1,
-	 changed/2,
+	 changed/3,
 	 delete/1,
+	 digraph_leaves/1,
 	 finalize/1,
+	 get_calls/1,
+	 get_changed_funs/1,
+	 get_escaping/1,
+	 get_name_map/1,
+	 get_rev_name_map/1,
+	 get_rec_var_map/1,
+	 get_self_rec/1,
 	 is_escaping/2,
+	 is_escaping/3,
 	 is_self_rec/2,
+	 is_self_rec/3,
 	 non_local_calls/1,
 	 lookup_rec_var/2,
+	 lookup_rec_var/3,
 	 lookup_call_site/2,
+	 lookup_call_site/3,
 	 lookup_label/2,
+	 lookup_label/3,
 	 lookup_name/2,
+	 lookup_name/3,
 	 modules/1,
 	 module_deps/1,
 	 %% module_postorder/1,
 	 module_postorder_from_funs/2,
-	 need_analysis/2,
+	 need_analysis/3,
 	 new/0,
 	 in_neighbours/2,
-	 renew_race_info/4,
+	 in_neighbours/3,
+	 renew_race_info/3,
 	 reset_from_funs/2,
 	 scan_core_tree/2,
 	 strip_module_deps/2,
+	 shrink/1,
 	 take_scc/1,
 	 remove_external/1,
 	 to_dot/2,
 	 to_ps/3]).
 
 %% Data structure interfaces.
--export([cleanup/1, get_digraph/1, get_named_tables/1, get_public_tables/1,
-         get_race_code/1, get_race_detection/1, race_code_new/1,
-         put_digraph/2, put_race_code/2, put_race_detection/2,
-         put_named_tables/2, put_public_tables/2, put_behaviour_api_calls/2,
-	 get_behaviour_api_calls/1, put_diff_mods/2, put_fast_plt/2,
-	 get_fast_plt/1]).
+-export([cleanup/2, get_digraph/1,  get_digraph2/1, 
+         get_race_detection/1, put_digraph/2, put_race_detection/2,
+         put_behaviour_api_calls/2, get_behaviour_api_calls/1, 
+	 put_diff_mods/2, put_fast_plt/2, get_fast_plt/1]).
 
--export_type([callgraph/0]).
+-export_type([callgraph/0, scc/0]).
 
 -include("dialyzer.hrl").
 
@@ -95,6 +109,7 @@
 %%-----------------------------------------------------------------------------
 
 -record(callgraph, {digraph        = digraph:new() :: digraph(),
+		    digraph2       = digraph:new() :: digraph(),
                     esc	           = sets:new()    :: set(),
                     name_map	   = dict:new()    :: dict(),
                     rev_name_map   = dict:new()    :: dict(),
@@ -102,7 +117,6 @@
                     rec_var_map    = dict:new()    :: dict(),
                     self_rec	   = sets:new()    :: set(),
                     calls          = dict:new()    :: dict(),
-                    race_code      = dict:new()    :: dict(),
                     public_tables  = []            :: [label()],
                     named_tables   = []            :: [string()],
                     race_detection = false         :: boolean(),
@@ -124,6 +138,41 @@
 new() ->
   #callgraph{}.
 
+-spec get_changed_funs(callgraph()) -> set().  
+
+get_changed_funs(#callgraph{changed_funs = ChangedFuns}) ->
+  ChangedFuns.
+
+-spec get_name_map(callgraph()) -> dict().  % set(mfa())
+
+get_name_map(#callgraph{name_map = NameMap}) ->
+  NameMap.
+
+-spec get_rev_name_map(callgraph()) -> dict().  % set(mfa())
+
+get_rev_name_map(#callgraph{rev_name_map = RevNameMap}) ->
+  RevNameMap.
+
+-spec get_rec_var_map(callgraph()) -> dict().  % set(mfa())
+
+get_rec_var_map(#callgraph{rec_var_map = RecVarMap}) ->
+  RecVarMap.
+
+-spec get_calls(callgraph()) -> dict().  % set(mfa())
+
+get_calls(#callgraph{calls = Calls}) ->
+  Calls.
+
+-spec get_self_rec(callgraph()) -> set().  % set(mfa())
+
+get_self_rec(#callgraph{self_rec = SelfRec}) ->
+  SelfRec.
+
+-spec get_escaping(callgraph()) -> set().  % set(mfa())
+
+get_escaping(#callgraph{esc = Esc}) ->
+  Esc.
+
 -spec delete(callgraph()) -> 'true'.
 
 delete(#callgraph{digraph = Digraph}) ->
@@ -134,11 +183,33 @@ delete(#callgraph{digraph = Digraph}) ->
 all_nodes(#callgraph{digraph = DG}) ->
   digraph_vertices(DG).
 
+-spec lookup_rec_var(label(), callgraph() | 'undefined', boolean()) -> 
+			'error' | {'ok', mfa()}.
+
+lookup_rec_var(Label, _Callgraph, true) when is_integer(Label) ->
+  case ets:lookup(?Cg_RecVarMap, Label) of
+    [] -> error;
+    [{_, MFA}] -> {ok, MFA}
+  end;
+lookup_rec_var(Label, Callgraph, false) -> 
+  lookup_rec_var(Label, Callgraph).
+
 -spec lookup_rec_var(label(), callgraph()) -> 'error' | {'ok', mfa()}.
 
 lookup_rec_var(Label, #callgraph{rec_var_map = RecVarMap})
   when is_integer(Label) ->
-  dict:find(Label, RecVarMap).
+  dict:find(Label, RecVarMap). 
+
+-spec lookup_call_site(label(), callgraph() | 'undefined', boolean()) ->
+			  'error' | {'ok', [_]}. % XXX: refine
+
+lookup_call_site(Label, CG, false) ->
+  lookup_call_site(Label, CG);
+lookup_call_site(Label, _Callgraph, true) when is_integer(Label) ->
+  case ets:lookup(?Cg_Calls, Label) of
+    [] -> error;
+    [{_,List}] -> {ok, List}
+  end.
 
 -spec lookup_call_site(label(), callgraph()) -> 'error' | {'ok', [_]}. % XXX: refine
 
@@ -146,11 +217,35 @@ lookup_call_site(Label, #callgraph{calls = Calls})
   when is_integer(Label) ->
   dict:find(Label, Calls).
 
+-spec lookup_name(label(), callgraph() | 'undefined', boolean()) ->
+		     'error' | {'ok', mfa()}.
+
+lookup_name(Label, _Callgraph, true) when is_integer(Label) ->
+  case ets:lookup(?Cg_NameMap,  Label) of
+    [] -> error;
+    [{_, MFA}] -> {ok, MFA}
+  end;
+lookup_name(Label, Callgraph, false) ->
+  lookup_name(Label, Callgraph).
+
 -spec lookup_name(label(), callgraph()) -> 'error' | {'ok', mfa()}.
 
 lookup_name(Label, #callgraph{name_map = NameMap})
   when is_integer(Label) ->
   dict:find(Label, NameMap).
+
+-spec lookup_label(mfa_or_funlbl(), callgraph()|'undefined', boolean()) -> 
+		      'error' | {'ok', integer()}.
+
+lookup_label({_,_,_} = MFA, _Callgraph, true) ->
+  case ets:lookup(?Cg_RevNameMap, MFA) of
+    [] -> error;
+    [{_, Label}] -> {ok, Label}
+  end;
+lookup_label(Label, _Callgraph, true) when is_integer(Label) ->
+  {ok, Label};
+lookup_label(MfaOrLabel, Callgraph, false) ->
+  lookup_label(MfaOrLabel, Callgraph).
 
 -spec lookup_label(mfa_or_funlbl(), callgraph()) -> 'error' | {'ok', integer()}.
 
@@ -158,6 +253,19 @@ lookup_label({_,_,_} = MFA, #callgraph{rev_name_map = RevNameMap}) ->
   dict:find(MFA, RevNameMap);
 lookup_label(Label, #callgraph{}) when is_integer(Label) ->
   {ok, Label}.
+
+-spec in_neighbours(mfa_or_funlbl(), callgraph(), boolean()) ->
+		       'none' | [mfa_or_funlbl(),...].
+
+in_neighbours(Label, #callgraph{digraph = Digraph} = Callgraph, Parallel) 
+  when is_integer(Label) ->
+  Name = case lookup_name(Label, Callgraph, Parallel) of
+	   {ok, Val} -> Val;
+	   error -> Label
+	 end,
+  digraph_in_neighbours(Name, Digraph);
+in_neighbours({_, _, _} = MFA, #callgraph{digraph = Digraph}, _Parallel) ->
+  digraph_in_neighbours(MFA, Digraph).
 
 -spec in_neighbours(mfa_or_funlbl(), callgraph()) -> 'none' | [mfa_or_funlbl(),...].
 
@@ -171,10 +279,30 @@ in_neighbours(Label, #callgraph{digraph = Digraph, name_map = NameMap})
 in_neighbours({_, _, _} = MFA, #callgraph{digraph = Digraph}) ->
   digraph_in_neighbours(MFA, Digraph).
 
+-spec is_self_rec(mfa_or_funlbl(), callgraph() | 'undefined', boolean()) -> 
+		     boolean().
+
+is_self_rec(MfaOrLabel, CG, false) ->
+  is_self_rec(MfaOrLabel, CG);
+is_self_rec(MfaOrLabel, _CG, true) ->
+  [{_ , SelfRecs}] = ets:lookup(?Callgraph, selfrec),
+  sets:is_element(MfaOrLabel, SelfRecs).
+
 -spec is_self_rec(mfa_or_funlbl(), callgraph()) -> boolean().
 
 is_self_rec(MfaOrLabel, #callgraph{self_rec = SelfRecs}) ->
   sets:is_element(MfaOrLabel, SelfRecs).
+
+-spec is_escaping(label(), callgraph() | 'undefined', boolean()) -> boolean().
+
+is_escaping(Label, Callgraph, Parallel) when is_integer(Label) ->
+  case Parallel of
+    true -> 
+      [{_ , Esc}] = ets:lookup(?Callgraph, esc);
+    false ->
+      Esc = Callgraph#callgraph.esc
+  end,
+  sets:is_element(Label, Esc).  
 
 -spec is_escaping(label(), callgraph()) -> boolean().
 
@@ -186,8 +314,8 @@ is_escaping(Label, #callgraph{esc = Esc}) when is_integer(Label) ->
 
 add_edges([], CG) ->
   CG;
-add_edges(Edges, #callgraph{digraph = Callgraph} = CG) ->
-  CG#callgraph{digraph = digraph_add_edges(Edges, Callgraph)}.
+add_edges(Edges, #callgraph{digraph = Digraph} = CG) ->
+  CG#callgraph{digraph = digraph_add_edges(Edges, Digraph)}.
 
 -spec add_edges([callgraph_edge()], [mfa_or_funlbl()], callgraph()) -> callgraph().
 
@@ -230,12 +358,11 @@ find_non_local_calls([{Label1, Label2}|Left], Set) when is_integer(Label1),
 find_non_local_calls([], Set) ->
   sets:to_list(Set).
 
--spec renew_race_info(callgraph(), dict(), [label()], [string()]) ->
-        callgraph().
+-spec renew_race_info(callgraph(), [label()], [string()]) ->
+			 callgraph().
 
-renew_race_info(CG, RaceCode, PublicTables, NamedTables) ->
-  CG#callgraph{race_code = RaceCode,
-               public_tables = PublicTables,
+renew_race_info(CG, PublicTables, NamedTables) ->
+  CG#callgraph{public_tables = PublicTables,
                named_tables = NamedTables}.
 
 %%----------------------------------------------------------------------
@@ -247,7 +374,7 @@ renew_race_info(CG, RaceCode, PublicTables, NamedTables) ->
 modules(#callgraph{digraph = DG}) ->
   ordsets:from_list([M || {M,_F,_A} <- digraph_vertices(DG)]).
 
--spec module_postorder(callgraph()) -> [[module()]].
+-spec module_postorder(callgraph()) -> {[[module()]], digraph()}.
 
 module_postorder(#callgraph{digraph = DG}) ->
   Edges = digraph_edges(DG),
@@ -259,8 +386,10 @@ module_postorder(#callgraph{digraph = DG}) ->
   PostOrder = digraph_utils:postorder(MDG3),
   PostOrder1 = sort_sccs_internally(PostOrder, MDG2),
   digraph:delete(MDG2),
-  digraph_delete(MDG3),
-  PostOrder1.
+  Edges2 = [digraph:edge(MDG3, E) || E <- digraph:edges(MDG3)],
+  SelfEdges = [E || {E, V, V, _} <- Edges2],
+  true = digraph:del_edges(MDG3, SelfEdges),
+  {PostOrder1, MDG3}.
 
 %% The module deps of a module are modules that depend on the module
 -spec module_deps(callgraph()) -> dict().
@@ -320,19 +449,16 @@ finalize(#callgraph{fast_plt = FastPlt} = CG) ->
 
 fast_finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   DG1 = digraph_utils:condensation(DG),
-  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(DG1, DiffMods),
+  ChangedFuns = dependencies(DG1, DiffMods),
   PostOrder = digraph_finalize(DG1, DiffMods),
-  digraph_delete(DG1),
-  CG#callgraph{postorder    = PostOrder,
-	       depends_on   = FunDependsOn,
-	       is_dependent = FunDependents,
-	       changed_funs = ChangedFuns}.
+  CG#callgraph{postorder = PostOrder,
+	       changed_funs = ChangedFuns,
+	       digraph2 = DG}.
 
 slow_finalize(#callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   DG1 = digraph_utils:condensation(DG),
   PostOrder = digraph_finalize(DG1, DiffMods),
-  digraph_delete(DG1),
-  CG#callgraph{postorder = PostOrder}.
+  CG#callgraph{postorder = PostOrder, digraph2 = DG}.
 
 -spec reset_from_funs([mfa_or_funlbl()], callgraph()) -> callgraph().
 
@@ -345,28 +471,24 @@ reset_from_funs(Funs, #callgraph{fast_plt = FastPlt} = CG) ->
 fast_reset_from_funs(Funs, #callgraph{digraph = DG, diff_mods = DiffMods} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
   SG1 = digraph_utils:condensation(SubGraph),
-  {ChangedFuns, FunDependsOn, FunDependents} = dependencies(SG1, DiffMods),
+  _ChangedFuns = dependencies(SG1, DiffMods),
   PostOrder = digraph_finalize(SG1, DiffMods),
-  digraph_delete(SG1),
-  digraph_delete(SubGraph),
   CG#callgraph{postorder    = PostOrder,
-	       depends_on   = FunDependsOn,
-	       is_dependent = FunDependents,
-	       changed_funs = ChangedFuns}.
+	       digraph2 = SubGraph}.
 
 slow_reset_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
   Postorder = slow_digraph_finalize(SubGraph),
-  digraph_delete(SubGraph),
-  CG#callgraph{postorder = Postorder}.
+  CG#callgraph{postorder = Postorder, digraph2 = SubGraph}.
 
--spec module_postorder_from_funs([mfa_or_funlbl()], callgraph()) -> [[module()]].
+-spec module_postorder_from_funs([mfa_or_funlbl()], callgraph()) ->
+				    {[[module()]], digraph()}.
 
 module_postorder_from_funs(Funs, #callgraph{digraph = DG} = CG) ->
   SubGraph = digraph_reaching_subgraph(Funs, DG),
-  PO = module_postorder(CG#callgraph{digraph = SubGraph}),
+  {PO, DG2} = module_postorder(CG#callgraph{digraph = SubGraph}),
   digraph_delete(SubGraph),
-  PO.
+  {PO, DG2}.
 
 %%----------------------------------------------------------------------
 %% Core code
@@ -619,6 +741,8 @@ digraph_postorder(Digraph, LastModule, Acc, DiffMods) ->
       end
   end.
 
+-spec digraph_leaves(digraph()) -> [term()].
+
 digraph_leaves(Digraph) ->
   [V || V <- digraph:vertices(Digraph), digraph:out_degree(Digraph, V) =:= 0].
 
@@ -662,7 +786,6 @@ digraph_finalize(DG, DiffMods) ->
 slow_digraph_finalize(DG) ->
   DG1 = digraph_utils:condensation(DG),
   Postorder = digraph_postorder(DG1, []),
-  digraph:delete(DG1),
   Postorder.
 
 digraph_reaching_subgraph(Funs, DG) ->
@@ -673,75 +796,50 @@ digraph_reaching_subgraph(Funs, DG) ->
 %% Races
 %%----------------------------------------------------------------------
 
--spec cleanup(callgraph()) -> callgraph().
+-spec cleanup(callgraph(), boolean()) -> callgraph().
 
-cleanup(#callgraph{digraph = Digraph,
-                   name_map = NameMap,
-                   rev_name_map = RevNameMap,
-                   public_tables = PublicTables,
-                   named_tables = NamedTables,
-                   race_code = RaceCode}) ->
+cleanup(#callgraph{digraph = Digraph}, true)->
+  #callgraph{digraph = Digraph};
+cleanup(#callgraph{digraph = Digraph,  
+		   name_map = NameMap,                                  
+                   rev_name_map = RevNameMap}, false)->                    
   #callgraph{digraph = Digraph,
-             name_map = NameMap,
-             rev_name_map = RevNameMap,
-             public_tables = PublicTables,
-             named_tables = NamedTables,
-             race_code = RaceCode}.
+             name_map = NameMap,                                          
+             rev_name_map = RevNameMap}.
 
 -spec get_digraph(callgraph()) -> digraph().
 
 get_digraph(#callgraph{digraph = Digraph}) ->
   Digraph.
 
--spec get_named_tables(callgraph()) -> [string()].
+-spec get_digraph2(callgraph()) -> digraph().
 
-get_named_tables(#callgraph{named_tables = NamedTables}) ->
-  NamedTables.
-
--spec get_public_tables(callgraph()) -> [label()].
-
-get_public_tables(#callgraph{public_tables = PT}) ->
-  PT.
-
--spec get_race_code(callgraph()) -> dict().
-
-get_race_code(#callgraph{race_code = RaceCode}) ->
-  RaceCode.
+get_digraph2(#callgraph{digraph2 = Digraph}) ->
+  Digraph.
 
 -spec get_race_detection(callgraph()) -> boolean().
 
 get_race_detection(#callgraph{race_detection = RD}) ->
   RD.
 
--spec race_code_new(callgraph()) -> callgraph().
-
-race_code_new(Callgraph) ->
-  Callgraph#callgraph{race_code = dict:new()}.
-
 -spec put_digraph(digraph(), callgraph()) -> callgraph().
 
 put_digraph(Digraph, Callgraph) ->
   Callgraph#callgraph{digraph = Digraph}.
-
--spec put_race_code(dict(), callgraph()) -> callgraph().
-
-put_race_code(RaceCode, Callgraph) ->
-  Callgraph#callgraph{race_code = RaceCode}.
 
 -spec put_race_detection(boolean(), callgraph()) -> callgraph().
 
 put_race_detection(RaceDetection, Callgraph) ->
   Callgraph#callgraph{race_detection = RaceDetection}.
 
--spec put_named_tables([string()], callgraph()) -> callgraph().
+-spec shrink(callgraph()) -> callgraph().
 
-put_named_tables(NamedTables, Callgraph) ->
-  Callgraph#callgraph{named_tables = NamedTables}.
-
--spec put_public_tables([label()], callgraph()) -> callgraph().
-
-put_public_tables(PublicTables, Callgraph) ->
-  Callgraph#callgraph{public_tables = PublicTables}.
+shrink(#callgraph{digraph = Digraph,                               
+		  race_detection = RaceDetection,                        
+		  beh_api_calls = BehApiCalls}) ->                    
+  #callgraph{digraph = Digraph,                                    
+	     race_detection = RaceDetection,                 
+	     beh_api_calls = BehApiCalls}.
 
 %%=============================================================================
 %% Utilities for 'dot'
@@ -770,7 +868,7 @@ to_ps(#callgraph{} = CG, File, Args) ->
   _ = os:cmd(Command),
   ok.
 
-%-------------------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
 
 -spec put_behaviour_api_calls([{mfa(), mfa()}], callgraph()) -> callgraph().
 
@@ -782,7 +880,7 @@ put_behaviour_api_calls(Calls, Callgraph) ->
 get_behaviour_api_calls(Callgraph) ->
   Callgraph#callgraph.beh_api_calls.
 
-%-------------------------------------------------------------------------------
+%%-------------------------------------------------------------------------------
 
 -spec put_diff_mods([atom()], callgraph()) -> callgraph().
 
@@ -805,40 +903,43 @@ get_fast_plt(Callgraph) ->
 
 dependencies(DG, DiffMods) ->
   F = digraph:vertices(DG),
-  DependsOnList  = [{F1, digraph:out_neighbours(DG, F1)} || F1 <- F],
-  DependentsList = [{F1, digraph:in_neighbours(DG, F1)}  || F1 <- F],
-  DependsOnDict  = lists:foldl(fun dict_store/2, dict:new(), DependsOnList),
-  DependentsDict = lists:foldl(fun dict_store/2, dict:new(), DependentsList),
+  DependsOnList  = [{{depends_on, F1}, digraph:out_neighbours(DG, F1)} || 
+		     F1 <- F],
+  DependentsList = [{{dependent_of, F1}, digraph:in_neighbours(DG, F1)} || 
+		     F1 <- F],
+  true = ets:insert(?Dependencies, DependsOnList ++ DependentsList),
   DiffF = [L || L <- F, {M,_,_} <- L, lists:member(M,DiffMods)],
-  NeedF = needed_fixpoint(DiffF,DependsOnDict),
+  NeedF = needed_fixpoint(DiffF),
   DifferFuns = lists:foldl(fun sets:add_element/2, sets:new(), DiffF),
-  NeededFuns = lists:foldl(fun sets:add_element/2, DifferFuns, NeedF),
-  {NeededFuns, DependsOnDict, DependentsDict}.
+  ChangedFuns = lists:foldl(fun sets:add_element/2, DifferFuns, NeedF),
+  true = ets:insert(?Changed_Funs, [{R,[]} || R <- sets:to_list(ChangedFuns)]),
+  ChangedFuns.
 
-dict_store({Key, Value}, Dict) ->
-  dict:store(Key, Value, Dict).
+needed_fixpoint(DiffF) ->
+  needed_fixpoint(DiffF, sets:new(), 0).
 
-needed_fixpoint(DiffF, DependsOnDict) ->
-  needed_fixpoint(DiffF, DependsOnDict, sets:new(), 0).
-
-needed_fixpoint(Base, Dict, Set, OldSize) ->
-  NewBase = lists:append([dict:fetch(Q, Dict) || Q <- Base]),
-  CleanBase = [Q || Q <- NewBase, not sets:is_element(Q, Set)],
+needed_fixpoint(Base, Set, OldSize) ->
+  NewBase = lists:append([ets:lookup(?Dependencies, {depends_on, Q}) 
+			  || Q <- Base]),
+  CleanBase = [V || {_,V} <- NewBase, not sets:is_element(V, Set)],
   NewSet = lists:foldl(fun sets:add_element/2, Set, CleanBase),
   NewSize = sets:size(NewSet),
   case NewSize =:= OldSize of
     true  -> sets:to_list(Set);
-    false -> needed_fixpoint(CleanBase, Dict, NewSet, NewSize)
+    false -> needed_fixpoint(CleanBase, NewSet, NewSize)
   end.
 
--spec need_analysis(scc(), callgraph()) -> boolean().
+-spec need_analysis(scc(), callgraph() | 'undefined', boolean()) -> boolean().
 
-need_analysis(SCC, Callgraph) ->
+need_analysis(SCC, _Callgraph, true) ->
+  ets:lookup(?Changed_Funs, SCC) =/= [];
+need_analysis(SCC, Callgraph, false) ->
   sets:is_element(SCC, Callgraph#callgraph.changed_funs).
 
--spec changed(scc(), callgraph()) -> callgraph().
+-spec changed(scc(), callgraph() | 'undefined', boolean()) -> 
+		 callgraph() | 'undefined'.
 
-changed(SCC, Callgraph) ->
+changed(SCC, Callgraph, false) ->
   DependentsDict = Callgraph#callgraph.is_dependent,
   DependsOnDict = Callgraph#callgraph.depends_on,
   ChangedFuns = Callgraph#callgraph.changed_funs,
@@ -847,6 +948,15 @@ changed(SCC, Callgraph) ->
   DepDependencies = lists:foldl(DepDependenciesFun, [], SCCDependents),
   NewChangedFuns =
     lists:foldl(fun sets:add_element/2, ChangedFuns, DepDependencies),
-  Callgraph#callgraph{changed_funs = NewChangedFuns}.
+  Callgraph#callgraph{changed_funs = NewChangedFuns};
+changed(SCC, Callgraph, true) ->
+  [{_, SCCDependents}] = ets:lookup(?Dependencies, {dependent_of, SCC}),
+  DepDependenciesFun = fun(V,L1) -> [{_, H}] = ets:lookup(?Dependencies, 
+							  {depends_on, V}),
+				    [H|L1] 
+		       end,
+  DepDependencies = lists:foldl(DepDependenciesFun, [], SCCDependents),
+  true = ets:insert(?Changed_Funs, [{DD, []} || DD <- DepDependencies]),
+  Callgraph.
 
-%-------------------------------------------------------------------------------
+%%-------------------------------------------------------------------------------
