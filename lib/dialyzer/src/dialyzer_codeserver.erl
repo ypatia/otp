@@ -33,22 +33,33 @@
 	 finalize_records/2,
 	 get_contracts/1,
          get_exported_types/1,
-	 get_exports/1,
+	 get_exported_types/2,
+	 get_exports/1, 
 	 get_records/1,
+	 get_records/2,
 	 get_next_core_label/1,
+	 get_next_core_label/2,
+	 get_table_pid/1,
 	 get_temp_contracts/1,
          get_temp_exported_types/1,
 	 get_temp_records/1,
 	 insert/3,
+	 insert/4,
 	 insert_exports/2,
          insert_temp_exported_types/2,
 	 is_exported/2,
 	 lookup_mod_code/2,
+	 lookup_mod_code/3,
 	 lookup_mfa_code/2,
+	 lookup_mfa_code/3,
 	 lookup_mod_records/2,
+	 lookup_mod_records/3,
 	 lookup_mod_contracts/2,
+	 lookup_mod_contracts/3,
 	 lookup_mfa_contract/2,
+	 lookup_mfa_contract/3,
 	 new/0,
+	 new/1,
 	 set_next_core_label/2,
 	 set_temp_records/2,
 	 store_records/3,
@@ -81,6 +92,18 @@
 new() ->
   #codeserver{table_pid = table__new()}.
 
+-spec new(boolean()) -> codeserver().
+
+new(Parallel) ->
+  case Parallel of 
+    true ->
+      ?Mfa_Codeserver = ets:new(?Mfa_Codeserver, [protected, named_table]),
+      ?Mod_Codeserver = ets:new(?Mod_Codeserver, [protected, named_table]),
+      #codeserver{};
+    false ->
+      new()
+  end.
+  
 -spec delete(codeserver()) -> 'ok'.
 
 delete(#codeserver{table_pid = TablePid}) ->
@@ -91,6 +114,21 @@ delete(#codeserver{table_pid = TablePid}) ->
 insert(Mod, ModCode, CS) ->
   NewTablePid = table__insert(CS#codeserver.table_pid, Mod, ModCode),
   CS#codeserver{table_pid = NewTablePid}.
+
+-spec insert(atom(), cerl:c_module(), codeserver(), boolean()) -> codeserver().
+
+insert(Mod, ModCode, CS, Parallel) ->
+  case Parallel of 
+    true ->
+      true = ets:insert(?Mod_Codeserver, {Mod, ModCode}),
+      true = ets:insert(?Mfa_Codeserver, [{{Mod, cerl:fname_id(Var), 
+				       cerl:fname_arity(Var)}, VarFun} 
+				     || {Var, _Fun} = VarFun 
+					  <- cerl:module_defs(ModCode)]),
+      CS;
+    false ->
+      insert(Mod, ModCode, CS)
+  end.
 
 -spec insert_temp_exported_types(set(), codeserver()) -> codeserver().
 
@@ -108,6 +146,14 @@ insert_exports(List, #codeserver{exports = Exports} = CS) ->
 
 is_exported(MFA, #codeserver{exports = Exports}) ->
   sets:is_element(MFA, Exports).
+
+-spec get_exported_types(codeserver() | 'undefined', boolean()) -> set(). 
+
+get_exported_types(_Codeserver, true) ->
+  [{_,ExpTypes}] = ets:lookup(?Cs_Exported_Types, exp_types),
+  ExpTypes;
+get_exported_types(#codeserver{exported_types = ExpTypes}, false) ->
+  ExpTypes.
 
 -spec get_exported_types(codeserver()) -> set(). % set(mfa())
 
@@ -129,20 +175,54 @@ get_exports(#codeserver{exports = Exports}) ->
 finalize_exported_types(Set, CS) ->
   CS#codeserver{exported_types = Set, temp_exported_types = sets:new()}.
 
+-spec lookup_mod_code(atom(), codeserver() | 'undefined', boolean()) -> 
+			 cerl:c_module().
+
+lookup_mod_code(Mod, CS, false) when is_atom(Mod) ->
+  lookup_mod_code(Mod, CS);
+lookup_mod_code(Mod, _CS, true) when is_atom(Mod) ->
+  [{_,ModCode}] = ets:lookup(?Mod_Codeserver, Mod),
+  ModCode.
+
 -spec lookup_mod_code(atom(), codeserver()) -> cerl:c_module().
 
 lookup_mod_code(Mod, CS) when is_atom(Mod) ->
   table__lookup(CS#codeserver.table_pid, Mod).
+
+-spec lookup_mfa_code(mfa(), codeserver() | 'undefined', boolean()) -> 
+			 {cerl:c_var(), cerl:c_fun()}.
+
+lookup_mfa_code({_M, _F, _A} = MFA, CS, Parallel) ->
+  case Parallel of
+    true->
+      [{_,MfaCode}] = ets:lookup(?Mfa_Codeserver, MFA),
+      MfaCode;
+    false->  
+      lookup_mfa_code(MFA, CS)
+  end.
 
 -spec lookup_mfa_code(mfa(), codeserver()) -> {cerl:c_var(), cerl:c_fun()}.
 
 lookup_mfa_code({_M, _F, _A} = MFA, CS) ->
   table__lookup(CS#codeserver.table_pid, MFA).
 
+-spec get_next_core_label(codeserver() | 'undefined', boolean()) -> label().
+
+get_next_core_label(CS, false) ->
+  get_next_core_label(CS);
+get_next_core_label(_CS, true) ->
+  [{next_core_label, NextLabel}]=ets:lookup(?Codeserver, next_core_label),
+  NextLabel.
+
 -spec get_next_core_label(codeserver()) -> label().
 
 get_next_core_label(#codeserver{next_core_label = NCL}) ->
   NCL.
+
+-spec get_table_pid(codeserver()) -> pid().
+
+get_table_pid(#codeserver{table_pid = TPid}) ->
+  TPid.
 
 -spec set_next_core_label(label(), codeserver()) -> codeserver().
 
@@ -158,6 +238,17 @@ store_records(Mod, Dict, #codeserver{records = RecDict} = CS)
     false -> CS#codeserver{records = dict:store(Mod, Dict, RecDict)}
   end.
 
+-spec lookup_mod_records(atom(), codeserver() | 'undefined', boolean()) ->
+			    dict().
+
+lookup_mod_records(Mod, CS, false) ->
+  lookup_mod_records(Mod, CS);
+lookup_mod_records(Mod, _CS, true) when is_atom(Mod)->
+  case ets:lookup(?Cs_Records, Mod) of
+    [] ->  dict:new();
+    [{_, Dict}] -> Dict
+  end.
+
 -spec lookup_mod_records(atom(), codeserver()) -> dict().
 
 lookup_mod_records(Mod, #codeserver{records = RecDict})
@@ -166,6 +257,14 @@ lookup_mod_records(Mod, #codeserver{records = RecDict})
     error -> dict:new();
     {ok, Dict} -> Dict
   end.
+
+-spec get_records(codeserver() | 'undefined', boolean()) -> dict(). 
+
+get_records(_Codeserver, true) ->
+  Records = ets:tab2list(?Cs_Records),
+  dict:from_list(Records);
+get_records(#codeserver{records = RecDict}, false) ->
+  RecDict.
 
 -spec get_records(codeserver()) -> dict().
 
@@ -204,6 +303,19 @@ store_contracts(Mod, Dict, #codeserver{contracts = C} = CS) when is_atom(Mod) ->
     false -> CS#codeserver{contracts = dict:store(Mod, Dict, C)}
   end.
 
+-spec lookup_mod_contracts(atom(), codeserver() | 'undefined', boolean()) ->
+			      dict().
+
+lookup_mod_contracts(Mod, CS, false)
+  when is_atom(Mod) ->
+  lookup_mod_contracts(Mod, CS);
+lookup_mod_contracts(Mod, _CS, true)
+  when is_atom(Mod) ->
+  case ets:lookup(?Cs_Contracts, Mod) of
+    [] -> dict:new();
+    [{_, Dict}] -> Dict
+  end.
+
 -spec lookup_mod_contracts(atom(), codeserver()) -> dict().
 
 lookup_mod_contracts(Mod, #codeserver{contracts = ContDict})
@@ -211,6 +323,17 @@ lookup_mod_contracts(Mod, #codeserver{contracts = ContDict})
   case dict:find(Mod, ContDict) of
     error -> dict:new();
     {ok, Dict} -> Dict
+  end.
+
+-spec lookup_mfa_contract(mfa(), codeserver() | 'undefined', boolean()) ->
+			     'error' | {'ok', dialyzer_contracts:file_contract()}.
+
+lookup_mfa_contract(MFA, CS, false) ->
+  lookup_mfa_contract(MFA, CS);
+lookup_mfa_contract({M,_F,_A} = MFA, _CS, true) ->
+  case ets:lookup(?Cs_Contracts, M) of
+    [] -> error;
+    [{_, Dict}] -> dict:find(MFA, Dict)
   end.
 
 -spec lookup_mfa_contract(mfa(), codeserver()) ->
