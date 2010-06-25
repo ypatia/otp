@@ -1299,6 +1299,7 @@ build_analysis_record(#gui_state{mode = Mode, menu = Menu, options = Options,
     end,
   #analysis{defines = Options#options.defines,
 	    include_dirs = Options#options.include_dirs,
+	    parallel_mode = Options#options.parallel_mode,
 	    plt = InitPlt,
 	    start_from = StartFrom}.
 
