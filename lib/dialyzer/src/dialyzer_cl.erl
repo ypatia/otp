@@ -351,6 +351,7 @@ do_analysis(Files, Options, Plt, PltInfo, DiffMods) ->
 			   include_dirs = Options#options.include_dirs,
 			   files = Files,
 			   start_from = Options#options.from,
+			   parallel_mode = Options#options.parallel_mode,
 			   plt = Plt,
 			   use_contracts = Options#options.use_contracts,
 			   callgraph_file = Options#options.callgraph_file,
