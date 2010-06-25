@@ -137,6 +137,9 @@ build_options([{OptionName, Value} = Term|Rest], Options) ->
       build_options(Rest, Options#options{check_plt = Value});
     fast_plt when is_boolean(Value) ->
       build_options(Rest, Options#options{fast_plt = Value});
+    parallel_mode when is_boolean(Value) ->
+      NewVal = decide_parallel_mode(Value), 
+      build_options(Rest, Options#options{parallel_mode = NewVal});
     defines ->
       assert_defines(Term, Value),
       OldVal = Options#options.defines,
@@ -225,6 +228,14 @@ is_plt_mode(plt_build)    -> true;
 is_plt_mode(plt_remove)   -> true;
 is_plt_mode(plt_check)    -> true;
 is_plt_mode(succ_typings) -> false.
+
+decide_parallel_mode(Parallel) ->
+  case Parallel of
+    true ->
+      (erlang:system_info(schedulers) > 1);
+    false ->
+      false
+  end.
 
 -spec build_warnings([atom()], [dial_warning()]) -> [dial_warning()].
 
