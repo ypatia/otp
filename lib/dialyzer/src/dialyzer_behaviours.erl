@@ -30,7 +30,7 @@
 
 -module(dialyzer_behaviours).
 
--export([check_callbacks/4, get_behaviours/2, get_behaviour_apis/1,
+-export([check_callbacks/5, get_behaviours/3, get_behaviour_apis/1,
 	 translate_behaviour_api_call/5, translatable_behaviours/1,
 	 translate_callgraph/3]).
 
@@ -47,30 +47,32 @@
 -record(state, {plt        :: dialyzer_plt:plt(),
 		codeserver :: dialyzer_codeserver:codeserver(),
 		filename   :: file:filename(),
-		behlines   :: [{behaviour(), non_neg_integer()}]}).
-
+		behlines   :: [{behaviour(), non_neg_integer()}],
+		parallel   :: boolean()}).
 %%--------------------------------------------------------------------
 
--spec get_behaviours([module()], dialyzer_codeserver:codeserver()) ->
-  {[behaviour()], [behaviour()]}.
+-spec get_behaviours([module()], dialyzer_codeserver:codeserver(), boolean()) ->
+			{[behaviour()], [behaviour()]}.
 
-get_behaviours(Modules, Codeserver) ->
-  get_behaviours(Modules, Codeserver, [], []).
+get_behaviours(Modules, Codeserver, Parallel) ->
+  get_behaviours(Modules, Codeserver, Parallel, [], []).
 
 -spec check_callbacks(module(), [{cerl:cerl(), cerl:cerl()}],
-		      dialyzer_plt:plt(),
-		      dialyzer_codeserver:codeserver()) -> [dial_warning()].
+		      dialyzer_plt:plt() | 'undefined',
+		      dialyzer_codeserver:codeserver() | 'undefined',
+		      boolean()) -> [dial_warning()].
 
-check_callbacks(Module, Attrs, Plt, Codeserver) ->
+check_callbacks(Module, Attrs, Plt, Codeserver, Parallel) ->
   {Behaviours, BehLines} = get_behaviours(Attrs),
   case Behaviours of
     [] -> [];
     _ ->
       MFA = {Module,module_info,0},
-      {_Var,Code} = dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
+      {_Var,Code} = dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver, 
+							Parallel),
       File = get_file(cerl:get_ann(Code)),
-      State = #state{plt = Plt, codeserver = Codeserver, filename = File,
-		     behlines = BehLines},
+      State = #state{plt = Plt, codeserver = Codeserver, filename = File, 
+					 behlines = BehLines, parallel = Parallel},
       Warnings = get_warnings(Module, Behaviours, State),
       [add_tag_file_line(Module, W, State) || W <- Warnings]
   end.
@@ -172,15 +174,15 @@ check_all_callbacks(Module, Behaviour, Callbacks, State) ->
 check_all_callbacks(_Module, _Behaviour, [], _State, Acc) ->
   Acc;
 check_all_callbacks(Module, Behaviour, [{Fun, Arity, Spec}|Rest],
-                    #state{codeserver = CServer} = State, Acc) ->
-  Records = dialyzer_codeserver:get_records(CServer),
-  ExpTypes = dialyzer_codeserver:get_exported_types(CServer),
+                    #state{codeserver = CServer, parallel = Parallel} = State, Acc) ->
+  Records = dialyzer_codeserver:get_records(CServer, Parallel),
+  ExpTypes = dialyzer_codeserver:get_exported_types(CServer, Parallel),
   case parse_spec(Spec, ExpTypes, Records) of
     {ok, Fun, Type} ->
       RetType = erl_types:t_fun_range(Type),
       ArgTypes = erl_types:t_fun_args(Type),
       Warns = check_callback(Module, Behaviour, Fun, Arity, RetType,
-			     ArgTypes, State#state.plt);
+			     ArgTypes, State);
     Else ->
       Warns = [{invalid_spec, [Behaviour, Fun, Arity, reason_spec_error(Else)]}]
   end,
@@ -226,8 +228,9 @@ ordinal(2) -> "2nd";
 ordinal(3) -> "3rd";
 ordinal(N) when is_integer(N) -> io_lib:format("~wth",[N]).
 
-check_callback(Module, Behaviour, Fun, Arity, XRetType, XArgTypes, Plt) ->
-  LookupType = dialyzer_plt:lookup(Plt, {Module, Fun, Arity}),
+check_callback(Module, Behaviour, Fun, Arity, XRetType, XArgTypes, 
+	       #state{parallel = Parallel, plt = Plt}) ->
+  LookupType = dialyzer_plt:lookup(Plt, {Module, Fun, Arity}, Parallel),
   case LookupType of
     {value, {Type,Args}} ->
       Warn1 = case unifiable(Type, XRetType) of
@@ -263,10 +266,11 @@ add_tag_file_line(_Module, {Tag, [B|_R]} = Warn, State)
        Tag =:= callback_missing ->
   {B, Line} = lists:keyfind(B, 1, State#state.behlines),
   {?WARN_BEHAVIOUR, {State#state.filename, Line}, Warn};
-add_tag_file_line(Module, {_Tag, [_B, Fun, Arity|_R]} = Warn, State) ->
+add_tag_file_line(Module, {_Tag, [_B, Fun, Arity|_R]} = Warn, 
+		  #state{codeserver = CServer, parallel = Parallel}) ->
   {_A, FunCode} =
     dialyzer_codeserver:lookup_mfa_code({Module, Fun, Arity},
-					State#state.codeserver),
+					CServer, Parallel),
   Anns = cerl:get_ann(FunCode),
   FileLine = {get_file(Anns), get_line(Anns)},
   {?WARN_BEHAVIOUR, FileLine, Warn}.
@@ -280,14 +284,15 @@ get_file([_|Tail]) -> get_file(Tail).
 
 %%-----------------------------------------------------------------------------
 
-get_behaviours([], _Codeserver, KnownAcc, UnknownAcc) ->
+get_behaviours([], _Codeserver, _Parallel, KnownAcc, UnknownAcc) ->
   {KnownAcc, UnknownAcc};
-get_behaviours([M|Rest], Codeserver, KnownAcc, UnknownAcc) ->
-  Tree = dialyzer_codeserver:lookup_mod_code(M, Codeserver),
+get_behaviours([M|Rest], Codeserver, Parallel, KnownAcc, UnknownAcc) ->
+  Tree = dialyzer_codeserver:lookup_mod_code(M, Codeserver, Parallel),
   Attrs = cerl:module_attrs(Tree),
   {Behaviours, _BehLines} = get_behaviours(Attrs),
   {Known, Unknown} = call_behaviours(Behaviours),
-  get_behaviours(Rest, Codeserver, Known ++ KnownAcc, Unknown ++ UnknownAcc).
+  get_behaviours(Rest, Codeserver, Parallel, Known ++ KnownAcc, 
+		 Unknown ++ UnknownAcc).
 
 call_behaviours(Behaviours) ->
   call_behaviours(Behaviours, [], []).
@@ -307,7 +312,7 @@ call_behaviours([Behaviour|Rest], KnownAcc, UnknownAcc) ->
     _:_ -> call_behaviours(Rest, KnownAcc, [Behaviour | UnknownAcc])
   end.
 
-%------------------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
 
 get_behaviour_apis([], Acc) ->
   Acc;
@@ -316,14 +321,14 @@ get_behaviour_apis([Behaviour | Rest], Acc) ->
 	   {{Fun, Arity}, _} <- behaviour_api_calls(Behaviour)],
   get_behaviour_apis(Rest, MFAs ++ Acc).
 
-%------------------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
 
 nth_or_0(0, _List, Zero) ->
   Zero;
 nth_or_0(N, List, _Zero) ->
   lists:nth(N, List).
 
-%------------------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
 
 -type behaviour_api_dict()::[{behaviour(), behaviour_api_info()}].
 -type behaviour_api_info()::[{original_fun(), replacement_fun()}].
