@@ -21,10 +21,10 @@
 -module(dialyzer_contracts).
 
 -export([check_contract/2,
-	 check_contracts/3,
-	 contracts_without_fun/3,
+	 check_contracts/4,
+	 contracts_without_fun/4,
 	 contract_to_string/1,
-	 get_invalid_contract_warnings/3,
+	 get_invalid_contract_warnings/4,
 	 get_contract_args/1,
 	 get_contract_return/1,
 	 get_contract_return/2,
@@ -158,12 +158,13 @@ process_contract_remote_types(CodeServer) ->
   dialyzer_codeserver:finalize_contracts(NewContractDict, CodeServer).
 
 -spec check_contracts([{mfa(), file_contract()}],
-		      dialyzer_callgraph:callgraph(), dict()) -> plt_contracts().
+		      dialyzer_callgraph:callgraph(), 
+		      dict(), boolean()) -> plt_contracts().
 
-check_contracts(Contracts, Callgraph, FunTypes) ->
+check_contracts(Contracts, Callgraph, FunTypes, Parallel) ->
   FoldFun =
     fun(Label, Type, NewContracts) ->
-	case dialyzer_callgraph:lookup_name(Label, Callgraph) of
+	case dialyzer_callgraph:lookup_name(Label, Callgraph, Parallel) of
 	  {ok, {M,F,A} = MFA} ->
 	    case orddict:find(MFA, Contracts) of
 	      {ok, {_FileLine, Contract}} ->
@@ -312,11 +313,12 @@ solve_constraints(Contract, Call, Constraints) ->
   %%  erl_types:t_assign_variables_to_subtype(Contract, Inf).
 
 %% Checks the contracts for functions that are not implemented
--spec contracts_without_fun(dict(), [_], dialyzer_callgraph:callgraph()) -> [dial_warning()].
+-spec contracts_without_fun(dict(), [_], dialyzer_callgraph:callgraph(),
+			    boolean()) -> [dial_warning()].
 
-contracts_without_fun(Contracts, AllFuns0, Callgraph) ->
-  AllFuns1 = [{dialyzer_callgraph:lookup_name(Label, Callgraph), Arity}
-	      || {Label, Arity} <- AllFuns0],
+contracts_without_fun(Contracts, AllFuns0, Callgraph, Parallel) ->
+  AllFuns1 = [{dialyzer_callgraph:lookup_name(Label, Callgraph, Parallel), 
+	       Arity} || {Label, Arity} <- AllFuns0],
   AllFuns2 = [{M, F, A} || {{ok, {M, F, _}}, A} <- AllFuns1],
   AllContractMFAs = dict:fetch_keys(Contracts),
   ErrorContractMFAs = AllContractMFAs -- AllFuns2,
@@ -414,26 +416,32 @@ general_domain([], AccSig) ->
   AccSig1 = erl_types:subst_all_vars_to_any(AccSig),
   erl_types:t_fun_args(AccSig1).
 
--spec get_invalid_contract_warnings([module()], dialyzer_codeserver:codeserver(), dialyzer_plt:plt()) -> [dial_warning()].
+-spec get_invalid_contract_warnings([module()], 
+				    dialyzer_codeserver:codeserver()|'undefined',
+				    dialyzer_plt:plt() | 'undefined', 
+				    boolean()) -> [dial_warning()].
 
-get_invalid_contract_warnings(Modules, CodeServer, Plt) ->
-  get_invalid_contract_warnings_modules(Modules, CodeServer, Plt, []).
+get_invalid_contract_warnings(Modules, CodeServer, Plt, Parallel) ->
+  get_invalid_contract_warnings_modules(Modules, CodeServer, Plt, Parallel,[]).
 
-get_invalid_contract_warnings_modules([Mod|Mods], CodeServer, Plt, Acc) ->
+get_invalid_contract_warnings_modules([Mod|Mods], CodeServer, Plt, 
+				      Parallel, Acc) ->
   Contracts1 = dialyzer_codeserver:lookup_mod_contracts(Mod, CodeServer),
   Contracts2 = dict:to_list(Contracts1),
   Records = dialyzer_codeserver:lookup_mod_records(Mod, CodeServer),
-  NewAcc = get_invalid_contract_warnings_funs(Contracts2, Plt, Records, Acc),
-  get_invalid_contract_warnings_modules(Mods, CodeServer, Plt, NewAcc);
-get_invalid_contract_warnings_modules([], _CodeServer, _Plt, Acc) ->
+  NewAcc = get_invalid_contract_warnings_funs(Contracts2, Plt, Records, 
+					      Parallel, Acc),
+  get_invalid_contract_warnings_modules(Mods, CodeServer, Plt, Parallel, 
+					NewAcc);
+get_invalid_contract_warnings_modules([], _CodeServer, _Plt, _Parallel, Acc) ->
   Acc.
 
 get_invalid_contract_warnings_funs([{MFA, {FileLine, Contract}}|Left],
-				   Plt, RecDict, Acc) ->
-  case dialyzer_plt:lookup(Plt, MFA) of
+				   Plt, RecDict, Parallel, Acc) ->
+  case dialyzer_plt:lookup(Plt, MFA, Parallel) of
     none ->
       %% This must be a contract for a non-available function. Just accept it.
-      get_invalid_contract_warnings_funs(Left, Plt, RecDict, Acc);
+      get_invalid_contract_warnings_funs(Left, Plt, RecDict, Parallel, Acc);
     {value, {Ret, Args}} ->
       Sig = erl_types:t_fun(Args, Ret),
       NewAcc =
@@ -468,9 +476,9 @@ get_invalid_contract_warnings_funs([{MFA, {FileLine, Contract}}|Left],
 				     RecDict, Acc)
 	    end
 	end,
-      get_invalid_contract_warnings_funs(Left, Plt, RecDict, NewAcc)
+      get_invalid_contract_warnings_funs(Left, Plt, RecDict, Parallel, NewAcc)
   end;
-get_invalid_contract_warnings_funs([], _Plt, _RecDict, Acc) ->
+get_invalid_contract_warnings_funs([], _Plt, _RecDict, _Parallel, Acc) ->
   Acc.
 
 invalid_contract_warning({M, F, A}, FileLine, SuccType, RecDict) ->
