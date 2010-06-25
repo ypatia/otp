@@ -28,13 +28,14 @@
 
 -module(dialyzer_dataflow).
 
--export([get_fun_types/4, get_warnings/5, format_args/3]).
+-export([get_fun_types/5, get_warnings/6, format_args/3]).
 
 %% Data structure interfaces.
 -export([state__add_warning/2, state__cleanup/1,
          state__get_callgraph/1, state__get_races/1,
-         state__get_records/1, state__put_callgraph/2,
-         state__put_races/2, state__records_only/1]).
+	 state__get_mode/1, state__get_records/1,
+	 state__put_callgraph/2, state__put_races/2,
+	 state__records_only/1]).
 
 %% Debug and test interfaces.
 -export([get_top_level_signatures/2, pp/1]).
@@ -89,6 +90,7 @@
 -record(state, {callgraph            :: dialyzer_callgraph:callgraph(),
 		envs                 :: dict(),
 		fun_tab		     :: dict(),
+		parallel             :: boolean(),
 		plt		     :: dialyzer_plt:plt(),
 		opaques              :: [erl_types:erl_type()],
 		races = dialyzer_races:new() :: dialyzer_races:races(),
@@ -107,33 +109,26 @@
 
 %%--------------------------------------------------------------------
 
--spec get_warnings(cerl:c_module(), dialyzer_plt:plt(),
-                   dialyzer_callgraph:callgraph(), dict(), set()) ->
-	{[dial_warning()], dict(), dict(), [label()], [string()]}.
+-spec get_warnings(cerl:c_module(), dialyzer_plt:plt()|'undefined',
+                   dialyzer_callgraph:callgraph(), dict(), set(), boolean()) ->
+		      [dial_warning()].
 
-get_warnings(Tree, Plt, Callgraph, Records, NoWarnUnused) ->
-  State1 = analyze_module(Tree, Plt, Callgraph, Records, true),
+get_warnings(Tree, Plt, Callgraph, Records, NoWarnUnused, Parallel) ->
+  State1 = analyze_module(Tree, Plt, Callgraph, Records, Parallel, true),
   State2 = find_mismatched_record_patterns(Tree, State1),
   State3 =
     state__renew_warnings(state__get_warnings(State2, NoWarnUnused), State2),
   State4 = state__get_race_warnings(State3),
-  Callgraph1 = State2#state.callgraph,
-  {State4#state.warnings, state__all_fun_types(State4),
-   dialyzer_callgraph:get_race_code(Callgraph1),
-   dialyzer_callgraph:get_public_tables(Callgraph1),
-   dialyzer_callgraph:get_named_tables(Callgraph1)}.
+  State4#state.warnings.
 
--spec get_fun_types(cerl:c_module(), dialyzer_plt:plt(),
-                    dialyzer_callgraph:callgraph(), dict()) ->
-	{dict(), dict(), [label()], [string()]}.
+-spec get_fun_types(cerl:c_module(), dialyzer_plt:plt()|'undefined',
+                    dialyzer_callgraph:callgraph(), dict(), boolean()) ->
+		       dict().
 
-get_fun_types(Tree, Plt, Callgraph, Records) ->
-  State = analyze_module(Tree, Plt, Callgraph, Records, false),
-  Callgraph1 = State#state.callgraph,
-  {state__all_fun_types(State),
-   dialyzer_callgraph:get_race_code(Callgraph1),
-   dialyzer_callgraph:get_public_tables(Callgraph1),
-   dialyzer_callgraph:get_named_tables(Callgraph1)}.
+
+get_fun_types(Tree, Plt, Callgraph, Records, Parallel) ->
+  State = analyze_module(Tree, Plt, Callgraph, Records, Parallel, false),
+  state__all_fun_types(State).
 
 %%--------------------------------------------------------------------
 
@@ -160,7 +155,7 @@ get_top_level_signatures(Code, Records) ->
   Callgraph = dialyzer_callgraph:finalize(Callgraph2),
   to_dot(Callgraph),
   Plt = get_def_plt(),
-  FunTypes = get_fun_types(Tree, Plt, Callgraph, Records),
+  FunTypes = get_fun_types(Tree, Plt, Callgraph, Records, false),
   FunTypes1 = lists:foldl(fun({V, F}, Acc) ->
 			      Label = get_label(F),
 			      case dict:find(Label, Acc) of
@@ -264,52 +259,46 @@ delete_ann(_, []) ->
 %%% ===========================================================================
 
 analyze_module(Tree, Plt, Callgraph) ->
-  analyze_module(Tree, Plt, Callgraph, dict:new(), false).
+  analyze_module(Tree, Plt, Callgraph, dict:new(), false, false).
 
-analyze_module(Tree, Plt, Callgraph, Records, GetWarnings) ->
+analyze_module(Tree, Plt, Callgraph, Records, Parallel, GetWarnings) ->
   debug_pp(Tree, false),
   Module = cerl:atom_val(cerl:module_name(Tree)),
   RaceDetection = dialyzer_callgraph:get_race_detection(Callgraph),
+  Digraph = dialyzer_callgraph:get_digraph(Callgraph),
   BehaviourTranslations =
     case RaceDetection of
       true -> dialyzer_behaviours:translatable_behaviours(Tree);
       false -> []
     end,
   TopFun = cerl:ann_c_fun([{label, top}], [], Tree),
-  State = state__new(dialyzer_callgraph:race_code_new(Callgraph),
-		     TopFun, Plt, Module, Records, BehaviourTranslations),
+  State = state__new(Callgraph, TopFun, Plt, Module, Records, 
+		     BehaviourTranslations, Parallel),
   State1 = state__race_analysis(not GetWarnings, State),
   State2 = analyze_loop(State1),
-  RaceCode = dialyzer_callgraph:get_race_code(Callgraph),
-  Callgraph1 = State2#state.callgraph,
-  RaceCode1 = dialyzer_callgraph:get_race_code(Callgraph1),
   case GetWarnings of
     true ->
       State3 = state__set_warning_mode(State2),
       State4 = analyze_loop(State3),
-      State5 = state__restore_race_code(RaceCode, State4),
 
       %% EXPERIMENTAL: Turn all behaviour API calls into calls to the
       %%               respective callback module's functions.
 
       case BehaviourTranslations of
-	[] -> dialyzer_races:race(State5);
+	[] -> dialyzer_races:race(State4);
 	Behaviours ->
-          Callgraph2 = State5#state.callgraph,
-          Digraph = dialyzer_callgraph:get_digraph(Callgraph2),
-	  TranslatedCallgraph =
+          Callgraph1 = State4#state.callgraph,
+          Digraph = dialyzer_callgraph:get_digraph(Callgraph1),
+       	  TranslatedCG =
 	    dialyzer_behaviours:translate_callgraph(Behaviours, Module,
-						    Callgraph2),
+						    Callgraph1),
           St =
-            dialyzer_races:race(State5#state{callgraph = TranslatedCallgraph}),
-          Callgraph3 = dialyzer_callgraph:put_digraph(Digraph,
+            dialyzer_races:race(State4#state{callgraph = TranslatedCG}),
+          Callgraph2 = dialyzer_callgraph:put_digraph(Digraph,
                                                       St#state.callgraph),
-          St#state{callgraph = Callgraph3}
+          St#state{callgraph = Callgraph2}
       end;
-    false ->
-      state__restore_race_code(
-        dict:merge(fun (_K, V1, _V2) -> V1 end,
-                   RaceCode, RaceCode1), State2)
+    false -> State2
   end.
 
 analyze_loop(#state{callgraph = Callgraph, races = Races} = State) ->
@@ -339,14 +328,14 @@ analyze_loop(#state{callgraph = Callgraph, races = Races} = State) ->
 	      Map1 = enter_type_lists(Vars, ArgTypes, Map),
 	      Body = cerl:fun_body(Fun),
               FunLabel = get_label(Fun),
-              RaceDetection = dialyzer_callgraph:get_race_detection(Callgraph),
+	          RaceDetection = dialyzer_callgraph:get_race_detection(Callgraph),
               RaceAnalysis = dialyzer_races:get_race_analysis(Races),
               NewState3 =
                 case RaceDetection andalso RaceAnalysis of
                   true ->
                     NewState2 = state__renew_curr_fun(
-                      state__lookup_name(FunLabel, NewState1), FunLabel,
-                      NewState1),
+				      state__lookup_name(FunLabel, NewState1), FunLabel,
+				      NewState1),
                     state__renew_race_list([], 0, NewState2);
 		  false -> NewState1
                 end,
@@ -355,25 +344,21 @@ analyze_loop(#state{callgraph = Callgraph, races = Races} = State) ->
 	      ?debug("Done analyzing: ~w:~s\n",
 		     [state__lookup_name(get_label(Fun), State),
 		      t_to_string(t_fun(ArgTypes, BodyType))]),
+	      case RaceDetection andalso RaceAnalysis of
+		true ->
+		  Races1 = NewState4#state.races,
+		  Code = lists:reverse(dialyzer_races:get_race_list(Races1)),
+		  renew_code(dialyzer_races:get_curr_fun(Races1),
+			     dialyzer_races:get_curr_fun_args(Races1),
+			     Code,
+			     state__warning_mode(NewState4));
+		false -> ok
+	      end,
               NewState5 =
-                case RaceDetection andalso RaceAnalysis of
-                  true ->
-		    Races1 = NewState4#state.races,
-                    Code = lists:reverse(dialyzer_races:get_race_list(Races1)),
-                    Callgraph1 =
-                      renew_code(dialyzer_races:get_curr_fun(Races1),
-                                 dialyzer_races:get_curr_fun_args(Races1),
-                                 Code,
-                                 state__warning_mode(NewState4),
-                                 NewState4#state.callgraph),
-                    NewState4#state{callgraph = Callgraph1};
-                  false -> NewState4
-                end,
-              NewState6 =
-                state__update_fun_entry(Fun, ArgTypes, BodyType, NewState5),
+                state__update_fun_entry(Fun, ArgTypes, BodyType, NewState4),
               ?debug("done adding stuff for ~w\n",
                      [state__lookup_name(get_label(Fun), State)]),
-              analyze_loop(NewState6)
+              analyze_loop(NewState5)
 	  end
       end
   end.
@@ -694,9 +679,9 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
   ?debug("BifRet: ~s\n", [erl_types:t_to_string(BifRange(NewArgTypes))]),
   ?debug("ContrRet: ~s\n", [erl_types:t_to_string(CRange(TmpArgTypes))]),
   ?debug("SigRet: ~s\n", [erl_types:t_to_string(SigRange)]),
+  RaceDetection = dialyzer_callgraph:get_race_detection(Callgraph),
   State1 =
-    case dialyzer_callgraph:get_race_detection(Callgraph) andalso
-         dialyzer_races:get_race_analysis(Races) of
+    case RaceDetection andalso dialyzer_races:get_race_analysis(Races) of
       true ->
         Ann = cerl:get_ann(Tree),
         File = get_file(Ann),
@@ -714,8 +699,12 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
 	    plain_call    -> {Fun, ArgTypes, Args};
 	    BehaviourAPI  -> BehaviourAPI
 	  end,
-        dialyzer_races:store_race_call(RealFun, RealArgTypes, RealArgs,
-				       {File, Line}, State);
+        case RaceDetection of
+	  true ->
+	    dialyzer_races:store_race_call(RealFun, RealArgTypes, RealArgs,
+					   {File, Line}, State);
+	  false -> State
+	end;
       false -> State
     end,
   FailedConj = any_none([RetWithoutLocal|NewArgTypes]),
@@ -1050,7 +1039,7 @@ handle_call(Tree, Map, State) ->
       end
   end.
 
-%%----------------------------------------
+%%----------------------------------------------------------------
 
 handle_case(Tree, Map, #state{callgraph = Callgraph} = State) ->
   Arg = cerl:case_arg(Tree),
@@ -1121,31 +1110,27 @@ handle_let(Tree, Map, #state{callgraph = Callgraph, races = Races} = State) ->
     end,
   Body = cerl:let_body(Tree),
   {State1, Map1, ArgTypes} = SMA = traverse(Arg, Map0, State0),
-  Callgraph1 = State1#state.callgraph,
-  Callgraph2 =
-    case RaceDetection andalso RaceAnalysis andalso cerl:is_c_call(Arg) of
-      true ->
-        Mod = cerl:call_module(Arg),
-        Name = cerl:call_name(Arg),
-        case cerl:is_literal(Mod) andalso
-             cerl:concrete(Mod) =:= ets andalso
-             cerl:is_literal(Name) andalso
-             cerl:concrete(Name) =:= new of
-          true ->
-            NewTable = dialyzer_races:get_new_table(State1#state.races),
-            renew_public_tables(Vars, NewTable,
-                                state__warning_mode(State1),
-                                Callgraph1);
-          false -> Callgraph1
-        end;
-      false -> Callgraph1
-    end,
-  State2 = State1#state{callgraph = Callgraph2},
+  case RaceDetection andalso RaceAnalysis andalso cerl:is_c_call(Arg) of
+    true ->
+      Mod = cerl:call_module(Arg),
+      Name = cerl:call_name(Arg),
+      case cerl:is_literal(Mod) andalso
+	cerl:concrete(Mod) =:= ets andalso
+	cerl:is_literal(Name) andalso
+	cerl:concrete(Name) =:= new of            
+	true ->
+	  NewTable = dialyzer_races:get_new_table(State1#state.races),
+	  renew_public_tables(Vars, NewTable,
+			      state__warning_mode(State1));
+	false ->ok
+      end;
+    false ->ok
+  end,
   case t_is_none_or_unit(ArgTypes) of
     true -> SMA;
     false ->
       Map2 = enter_type_lists(Vars, t_to_tlist(ArgTypes), Map1),
-      traverse(Body, Map2, State2)
+      traverse(Body, Map2, State1)
   end.
 
 %%----------------------------------------
@@ -2656,13 +2641,13 @@ lookup(Key, Map, Subst, AnyNone) ->
       end
   end.
 
-lookup_fun_sig(Fun, Callgraph, Plt) ->
+lookup_fun_sig(Fun, Callgraph, Plt, Parallel) ->
   MFAorLabel =
-    case dialyzer_callgraph:lookup_name(Fun, Callgraph) of
+    case dialyzer_callgraph:lookup_name(Fun, Callgraph, Parallel) of
       error -> Fun;
       {ok, MFA} -> MFA
     end,
-  dialyzer_plt:lookup(Plt, MFAorLabel).
+  dialyzer_plt:lookup(Plt, MFAorLabel, Parallel).
 
 literal_type(Lit) ->
   t_from_term(cerl:concrete(Lit)).
@@ -2770,16 +2755,19 @@ determine_mode(Type, Opaques) ->
 %%%
 %%% ===========================================================================
 
-state__new(Callgraph, Tree, Plt, Module, Records, BehaviourTranslations) ->
+state__new(Callgraph, Tree, Plt, Module, Records, 
+	   BehaviourTranslations, Parallel) ->
   Opaques = erl_types:module_builtin_opaques(Module) ++
     erl_types:t_opaque_from_records(Records),
   TreeMap = build_tree_map(Tree),
   Funs = dict:fetch_keys(TreeMap),
-  FunTab = init_fun_tab(Funs, dict:new(), TreeMap, Callgraph, Plt, Opaques),
+  FunTab = init_fun_tab(Funs, dict:new(), TreeMap, Callgraph, 
+			Plt, Opaques, Parallel),
   Work = init_work([get_label(Tree)]),
   Env = dict:store(top, map__new(), dict:new()),
-  #state{callgraph = Callgraph, envs = Env, fun_tab = FunTab, opaques = Opaques,
-	 plt = Plt, races = dialyzer_races:new(), records = Records,
+  #state{callgraph = Callgraph, envs = Env, fun_tab = FunTab, 
+	 plt = Plt, parallel = Parallel, opaques = Opaques, 
+	 races = dialyzer_races:new(), records = Records, 
 	 warning_mode = false, warnings = [], work = Work, tree_map = TreeMap,
 	 module = Module, behaviour_api_dict = BehaviourTranslations}.
 
@@ -2802,10 +2790,6 @@ state__set_warning_mode(#state{tree_map = TreeMap, fun_tab = FunTab,
   State#state{work = init_work([top|Funs--[top]]),
 	      fun_tab = FunTab, warning_mode = true,
               races = dialyzer_races:put_race_analysis(true, Races)}.
-
-state__restore_race_code(RaceCode, #state{callgraph = Callgraph} = State) ->
-  State#state{callgraph = dialyzer_callgraph:put_race_code(RaceCode,
-                                                           Callgraph)}.
 
 state__race_analysis(Analysis, #state{races = Races} = State) ->
   State#state{races = dialyzer_races:put_race_analysis(Analysis, Races)}.
@@ -2861,8 +2845,8 @@ state__get_race_warnings(#state{races = Races} = State) ->
   State1#state{races = Races1}.
 
 state__get_warnings(#state{tree_map = TreeMap, fun_tab = FunTab,
-			   callgraph = Callgraph, plt = Plt} = State,
-		    NoWarnUnused) ->
+			   callgraph = Callgraph, parallel = Parallel, 
+			   plt = Plt} = State, NoWarnUnused) ->
   FoldFun =
     fun({top, _}, AccState) -> AccState;
        ({FunLbl, Fun}, AccState) ->
@@ -2874,7 +2858,7 @@ state__get_warnings(#state{tree_map = TreeMap, fun_tab = FunTab,
 	case NotCalled of
 	  true ->
 	    {Warn, Msg} =
-	      case dialyzer_callgraph:lookup_name(FunLbl, Callgraph) of
+	      case dialyzer_callgraph:lookup_name(FunLbl, Callgraph, Parallel) of
 		error -> {true, {unused_fun, []}};
 		{ok, {_M, F, A}} = MFA ->
 		  {not sets:is_element(MFA, NoWarnUnused),
@@ -2886,10 +2870,10 @@ state__get_warnings(#state{tree_map = TreeMap, fun_tab = FunTab,
 	    end;
 	  false ->
 	    {Name, Contract} =
-	      case dialyzer_callgraph:lookup_name(FunLbl, Callgraph) of
+	      case dialyzer_callgraph:lookup_name(FunLbl, Callgraph, Parallel) of
 		error -> {[], none};
 		{ok, {_M, F, A} = MFA} ->
-		  {[F, A], dialyzer_plt:lookup_contract(Plt, MFA)}
+		  {[F, A], dialyzer_plt:lookup_contract(Plt, MFA, Parallel)}
 	      end,
 	    case t_is_none(Ret) of
 	      true ->
@@ -2932,15 +2916,17 @@ state__get_warnings(#state{tree_map = TreeMap, fun_tab = FunTab,
   #state{warnings = Warn} = lists:foldl(FoldFun, State, dict:to_list(TreeMap)),
   Warn.
 
-state__is_escaping(Fun, #state{callgraph = Callgraph}) ->
-  dialyzer_callgraph:is_escaping(Fun, Callgraph).
+state__is_escaping(Fun, #state{callgraph = Callgraph, parallel = Parallel}) ->
+  dialyzer_callgraph:is_escaping(Fun, Callgraph, Parallel).
 
-state__lookup_type_for_rec_var(Var, #state{callgraph = Callgraph} = State) ->
+state__lookup_type_for_rec_var(Var, #state{callgraph = Callgraph, 
+					   parallel = Parallel} = State) ->
   Label = get_label(Var),
-  case dialyzer_callgraph:lookup_rec_var(Label, Callgraph) of
+  case dialyzer_callgraph:lookup_rec_var(Label, Callgraph, Parallel) of
     error -> error;
     {ok, MFA} ->
-      {ok, FunLabel} = dialyzer_callgraph:lookup_label(MFA, Callgraph),
+      {ok, FunLabel} = dialyzer_callgraph:lookup_label(MFA, Callgraph, 
+						       Parallel),
       {ok, state__fun_type(FunLabel, State)}
   end.
 
@@ -2948,8 +2934,8 @@ state__lookup_name({_, _, _} = MFA, #state{}) ->
   MFA;
 state__lookup_name(top, #state{}) ->
   top;
-state__lookup_name(Fun, #state{callgraph = Callgraph}) ->
-  case dialyzer_callgraph:lookup_name(Fun, Callgraph) of
+state__lookup_name(Fun, #state{callgraph = Callgraph, parallel = Parallel}) ->
+  case dialyzer_callgraph:lookup_name(Fun, Callgraph, Parallel) of
     {ok, MFA} -> MFA;
     error -> Fun
   end.
@@ -2982,19 +2968,19 @@ build_tree_map(Tree) ->
     end,
   cerl_trees:fold(Fun, dict:new(), Tree).
 
-init_fun_tab([top|Left], Dict, TreeMap, Callgraph, Plt, Opaques) ->
+init_fun_tab([top|Left], Dict, TreeMap, Callgraph, Plt, Opaques, Parallel) ->
   NewDict = dict:store(top, {not_handled, {[], t_none()}}, Dict),
-  init_fun_tab(Left, NewDict, TreeMap, Callgraph, Plt, Opaques);
-init_fun_tab([Fun|Left], Dict, TreeMap, Callgraph, Plt, Opaques) ->
+  init_fun_tab(Left, NewDict, TreeMap, Callgraph, Plt, Opaques, Parallel);
+init_fun_tab([Fun|Left], Dict, TreeMap, Callgraph, Plt, Opaques, Parallel) ->
   Arity = cerl:fun_arity(dict:fetch(Fun, TreeMap)),
   FunEntry =
-    case dialyzer_callgraph:is_escaping(Fun, Callgraph) of
+    case dialyzer_callgraph:is_escaping(Fun, Callgraph, Parallel) of
       true ->
         Args =
-          case dialyzer_callgraph:lookup_name(Fun, Callgraph) of
+          case dialyzer_callgraph:lookup_name(Fun, Callgraph, Parallel) of
             error -> lists:duplicate(Arity, t_any());
             {ok, MFA} ->
-              case dialyzer_plt:lookup_contract(Plt, MFA) of
+              case dialyzer_plt:lookup_contract(Plt, MFA, Parallel) of
                 none -> lists:duplicate(Arity, t_any());
                 {value, #contract{args = Arguments}} ->
                   [begin
@@ -3005,7 +2991,7 @@ init_fun_tab([Fun|Left], Dict, TreeMap, Callgraph, Plt, Opaques) ->
                    end || A <- Arguments]
               end
           end,
-	case lookup_fun_sig(Fun, Callgraph, Plt) of
+	case lookup_fun_sig(Fun, Callgraph, Plt, Parallel) of
 	  none -> {Args, t_unit()};
 	  {value, {RetType, _}} ->
 	    case t_is_none(RetType) of
@@ -3016,8 +3002,8 @@ init_fun_tab([Fun|Left], Dict, TreeMap, Callgraph, Plt, Opaques) ->
       false -> {lists:duplicate(Arity, t_none()), t_unit()}
     end,
   NewDict = dict:store(Fun, {not_handled, FunEntry}, Dict),
-  init_fun_tab(Left, NewDict, TreeMap, Callgraph, Plt, Opaques);
-init_fun_tab([], Dict, _TreeMap, _Callgraph, _Plt, _Opaques) ->
+  init_fun_tab(Left, NewDict, TreeMap, Callgraph, Plt, Opaques, Parallel);
+init_fun_tab([], Dict, _TreeMap, _Callgraph, _Plt, _Opaques, _Parallel) ->
   Dict.
 
 state__update_fun_env(Tree, Map, #state{envs = Envs} = State) ->
@@ -3055,13 +3041,15 @@ state__fun_type(Fun, #state{fun_tab = FunTab}) ->
       t_fun(A, R)
   end.
 
-state__update_fun_entry(Tree, ArgTypes, Out0,
-			#state{fun_tab=FunTab, callgraph=CG, plt=Plt} = State)->
+
+state__update_fun_entry(Tree, ArgTypes, Out0, #state{fun_tab=FunTab, 
+						     callgraph = CG, plt = Plt, 
+							 parallel = Parallel} = State)->
   Fun = get_label(Tree),
   Out1 =
     if Fun =:= top -> Out0;
        true ->
-	case lookup_fun_sig(Fun, CG, Plt) of
+	case lookup_fun_sig(Fun, CG, Plt, Parallel) of
 	  {value, {SigRet, _}} -> t_inf(SigRet, Out0, opaque);
 	  none -> Out0
 	end
@@ -3097,15 +3085,15 @@ state__update_fun_entry(Tree, ArgTypes, Out0,
 
 state__add_work_from_fun(_Tree, #state{warning_mode = true} = State) ->
   State;
-state__add_work_from_fun(Tree, #state{callgraph = Callgraph,
-				      tree_map = TreeMap} = State) ->
+state__add_work_from_fun(Tree, #state{callgraph = Callgraph, tree_map = TreeMap,
+				      parallel = Parallel} = State) ->
   case get_label(Tree) of
     top -> State;
     Label when is_integer(Label) ->
-      case dialyzer_callgraph:in_neighbours(Label, Callgraph) of
+      case dialyzer_callgraph:in_neighbours(Label, Callgraph, Parallel) of
 	none -> State;
 	MFAList ->
-	  LabelList = [dialyzer_callgraph:lookup_label(MFA, Callgraph)
+	  LabelList = [dialyzer_callgraph:lookup_label(MFA, Callgraph, Parallel)
 		       || MFA <- MFAList],
 	  %% Must filter the result for results in this module.
 	  FilteredList = [L || {ok, L} <- LabelList, dict:is_key(L, TreeMap)],
@@ -3132,24 +3120,27 @@ state__get_work(#state{work = Work, tree_map = TreeMap} = State) ->
       {dict:fetch(Fun, TreeMap), State#state{work = NewWork}}
   end.
 
-state__lookup_call_site(Tree, #state{callgraph = Callgraph}) ->
+state__lookup_call_site(Tree, #state{callgraph = Callgraph, 
+				     parallel = Parallel}) ->
   Label = get_label(Tree),
-  dialyzer_callgraph:lookup_call_site(Label, Callgraph).
+  dialyzer_callgraph:lookup_call_site(Label, Callgraph, Parallel).
 
 state__fun_info(external, #state{}) ->
   external;
-state__fun_info({_, _, _} = MFA, #state{plt = PLT}) ->
+state__fun_info({_, _, _} = MFA, #state{parallel = Parallel, plt = PLT}) ->
   {MFA,
-   dialyzer_plt:lookup(PLT, MFA),
-   dialyzer_plt:lookup_contract(PLT, MFA),
+   dialyzer_plt:lookup(PLT, MFA, Parallel), 
+   dialyzer_plt:lookup_contract(PLT, MFA, Parallel),
    t_any()};
-state__fun_info(Fun, #state{callgraph = CG, fun_tab = FunTab, plt = PLT}) ->
+state__fun_info(Fun, #state{callgraph = CG, fun_tab = FunTab, 
+			    parallel = Parallel, plt = PLT}) ->
   {Sig, Contract} =
-    case dialyzer_callgraph:lookup_name(Fun, CG) of
-      error ->
-	{dialyzer_plt:lookup(PLT, Fun), none};
-      {ok, MFA} ->
-	{dialyzer_plt:lookup(PLT, MFA), dialyzer_plt:lookup_contract(PLT, MFA)}
+    case dialyzer_callgraph:lookup_name(Fun, CG, Parallel) of
+      error -> 
+	{dialyzer_plt:lookup(PLT, Fun, Parallel), none};
+      {ok, MFA} -> 
+	{dialyzer_plt:lookup(PLT, MFA, Parallel),
+	 dialyzer_plt:lookup_contract(PLT, MFA, Parallel)}
     end,
   LocalRet =
     case dict:fetch(Fun, FunTab) of
@@ -3197,16 +3188,23 @@ forward_args(Fun, ArgTypes, #state{work = Work, fun_tab = FunTab} = State) ->
 -spec state__cleanup(state()) -> state().
 
 state__cleanup(#state{callgraph = Callgraph,
-                      races = Races,
-                      records = Records}) ->
-  #state{callgraph = dialyzer_callgraph:cleanup(Callgraph),
-         races = dialyzer_races:cleanup(Races),
-         records = Records}.
+		      races = Races,
+              records = Records,
+		      parallel = Parallel}) ->
+  #state{callgraph = dialyzer_callgraph:cleanup(Callgraph, Parallel),
+	 races = dialyzer_races:cleanup(Races),
+	 records = Records,
+	 parallel = Parallel}.
 
 -spec state__get_callgraph(state()) -> dialyzer_callgraph:callgraph().
 
 state__get_callgraph(#state{callgraph = Callgraph}) ->
   Callgraph.
+
+-spec state__get_mode(state()) -> boolean().
+
+state__get_mode(#state{parallel = Parallel}) ->
+  Parallel.
 
 -spec state__get_races(state()) -> dialyzer_races:races().
 
@@ -3240,26 +3238,21 @@ state__records_only(#state{records = Records}) ->
 %%%
 %%% ===========================================================================
 
-renew_code(Fun, FunArgs, Code, WarningMode, Callgraph) ->
+renew_code(Fun, FunArgs, Code, WarningMode) ->
   case WarningMode of
-    true -> Callgraph;
-    false ->
-      RaceCode = dialyzer_callgraph:get_race_code(Callgraph),
-      dialyzer_callgraph:put_race_code(
-        dict:store(Fun, [FunArgs, Code], RaceCode), Callgraph)
+    true -> ok;
+    false -> ets:insert(cfgs, {Fun, FunArgs, Code})
   end.
 
-renew_public_tables([Var], Table, WarningMode, Callgraph) ->
+renew_public_tables([Var], Table, WarningMode) ->
   case WarningMode of
-    true -> Callgraph;
+    true -> ok;
     false ->
       case Table of
-        no_t -> Callgraph;
+        no_t -> ok;
         _Other ->
           VarLabel = get_label(Var),
-          PTables = dialyzer_callgraph:get_public_tables(Callgraph),
-          dialyzer_callgraph:put_public_tables(
-            lists:usort([VarLabel|PTables]), Callgraph)
+          dialyzer_races:put_public_tables([VarLabel])
       end
   end.
 
