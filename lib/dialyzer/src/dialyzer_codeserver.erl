@@ -90,7 +90,7 @@
 -spec new() -> codeserver().
 
 new() ->
-  #codeserver{table_pid = table__new()}.
+   #codeserver{table_pid = table__new()}.
 
 -spec new(boolean()) -> codeserver().
 
@@ -108,7 +108,7 @@ new(Parallel) ->
 
 delete(#codeserver{table_pid = TablePid}) ->
   table__delete(TablePid).
-
+ 
 -spec insert(atom(), cerl:c_module(), codeserver()) -> codeserver().
 
 insert(Mod, ModCode, CS) ->
@@ -120,9 +120,9 @@ insert(Mod, ModCode, CS) ->
 insert(Mod, ModCode, CS, Parallel) ->
   case Parallel of 
     true ->
-      true = ets:insert(?Mod_Codeserver, {Mod, ModCode}),
+      true = ets:insert(?Mod_Codeserver, {Mod, term_to_binary(ModCode, [compressed])}),
       true = ets:insert(?Mfa_Codeserver, [{{Mod, cerl:fname_id(Var), 
-				       cerl:fname_arity(Var)}, VarFun} 
+				       cerl:fname_arity(Var)}, term_to_binary(VarFun, [compressed])} 
 				     || {Var, _Fun} = VarFun 
 					  <- cerl:module_defs(ModCode)]),
       CS;
@@ -182,7 +182,7 @@ lookup_mod_code(Mod, CS, false) when is_atom(Mod) ->
   lookup_mod_code(Mod, CS);
 lookup_mod_code(Mod, _CS, true) when is_atom(Mod) ->
   [{_,ModCode}] = ets:lookup(?Mod_Codeserver, Mod),
-  ModCode.
+  binary_to_term(ModCode).
 
 -spec lookup_mod_code(atom(), codeserver()) -> cerl:c_module().
 
@@ -196,7 +196,7 @@ lookup_mfa_code({_M, _F, _A} = MFA, CS, Parallel) ->
   case Parallel of
     true->
       [{_,MfaCode}] = ets:lookup(?Mfa_Codeserver, MFA),
-      MfaCode;
+      binary_to_term(MfaCode);
     false->  
       lookup_mfa_code(MFA, CS)
   end.
@@ -238,8 +238,7 @@ store_records(Mod, Dict, #codeserver{records = RecDict} = CS)
     false -> CS#codeserver{records = dict:store(Mod, Dict, RecDict)}
   end.
 
--spec lookup_mod_records(atom(), codeserver() | 'undefined', boolean()) ->
-			    dict().
+-spec lookup_mod_records(atom(), codeserver() | 'undefined', boolean()) -> dict().
 
 lookup_mod_records(Mod, CS, false) ->
   lookup_mod_records(Mod, CS);
@@ -266,7 +265,7 @@ get_records(_Codeserver, true) ->
 get_records(#codeserver{records = RecDict}, false) ->
   RecDict.
 
--spec get_records(codeserver()) -> dict().
+-spec get_records(codeserver()) -> dict(). 
 
 get_records(#codeserver{records = RecDict}) ->
   RecDict.
@@ -303,8 +302,7 @@ store_contracts(Mod, Dict, #codeserver{contracts = C} = CS) when is_atom(Mod) ->
     false -> CS#codeserver{contracts = dict:store(Mod, Dict, C)}
   end.
 
--spec lookup_mod_contracts(atom(), codeserver() | 'undefined', boolean()) ->
-			      dict().
+-spec lookup_mod_contracts(atom(), codeserver() | 'undefined', boolean()) -> dict().
 
 lookup_mod_contracts(Mod, CS, false)
   when is_atom(Mod) ->
