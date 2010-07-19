@@ -3423,14 +3423,14 @@ t_from_form({op, _L, _Op, _Arg} = Op, _TypeNames, _InOpaque, _RecDict,
   case erl_eval:partial_eval(Op) of
     {integer, _, Val} ->
       {t_integer(Val), []};
-    _ -> throw({error, io_lib:format("Unable evaluate type ~w\n", [Op])})
+    _ -> throw({error, io_lib:format("Unable to evaluate type ~w\n", [Op])})
   end;
 t_from_form({op, _L, _Op, _Arg1, _Arg2} = Op, _TypeNames, _InOpaque,
             _RecDict, _VarDict) ->
   case erl_eval:partial_eval(Op) of
     {integer, _, Val} ->
       {t_integer(Val), []};
-    _ -> throw({error, io_lib:format("Unable evaluate type ~w\n", [Op])})
+    _ -> throw({error, io_lib:format("Unable to evaluate type ~w\n", [Op])})
   end;
 t_from_form({type, _L, any, []}, _TypeNames, _InOpaque, _RecDict,
             _VarDict) ->
@@ -3454,7 +3454,7 @@ t_from_form({type, _L, binary, [Base, Unit]} = Type,
      {integer, _, UnitVal}}
       when BaseVal >= 0, UnitVal >= 0 ->
       {t_bitstr(UnitVal, BaseVal), []};
-    _ -> throw({error, io_lib:format("Unable evaluate type ~w\n", [Type])})
+    _ -> throw({error, io_lib:format("Unable to evaluate type ~w\n", [Type])})
   end;
 t_from_form({type, _L, bitstring, []}, _TypeNames, _InOpaque, _RecDict,
             _VarDict) ->
@@ -3597,10 +3597,9 @@ t_from_form({type, _L, queue, []}, _TypeNames, _InOpaque, _RecDict,
 t_from_form({type, _L, range, [From, To]} = Type,
 	    _TypeNames, _InOpaque, _RecDict, _VarDict) ->
   case {erl_eval:partial_eval(From), erl_eval:partial_eval(To)} of
-    {{integer, _, FromVal},
-     {integer, _, ToVal}} ->
+    {{integer, _, FromVal}, {integer, _, ToVal}} ->
       {t_from_range(FromVal, ToVal), []};
-    _ -> throw({error, io_lib:format("Unable evaluate type ~w\n", [Type])})
+    _ -> throw({error, io_lib:format("Unable to evaluate type ~w\n", [Type])})
   end;
 t_from_form({type, _L, record, [Name|Fields]}, TypeNames, InOpaque, RecDict,
             VarDict) ->
