@@ -213,7 +213,7 @@ get_record_and_type_info([], _Module, Records, RecDict) ->
     {ok, _NewRecDict} = Ok ->
       ?debug(NewRecDict),
       Ok;
-    {Name, {error, Error}} ->
+    {error, Name, Error} ->
       {error, lists:flatten(io_lib:format("  Error while parsing #~w{}: ~s\n",
 					  [Name, Error]))}
   end.
@@ -269,9 +269,9 @@ type_record_fields([RecKey|Recs], RecDict) ->
     RecDict2 = dict:update(RecKey, Fun, RecDict1),
     type_record_fields(Recs, RecDict2)
   catch
-    throw:{error, _} = Error ->
+    throw:{error, Error} ->
       {record, Name} = RecKey,
-      {Name, Error}
+      {error, Name, Error}
   end.
 
 -spec process_record_remote_types(dialyzer_codeserver:codeserver()) -> dialyzer_codeserver:codeserver().
