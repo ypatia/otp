@@ -40,7 +40,7 @@
 -compile(inline).
 
 %%--------------------------------------------------------------------
--spec security_parameters(erl_cipher_suite(), #security_parameters{}) ->				 
+-spec security_parameters(cipher_suite(), #security_parameters{}) -> 
 				 #security_parameters{}.
 %%
 %% Description: Returns a security parameters record where the
@@ -119,7 +119,7 @@ block_cipher(Fun, BlockSz, #cipher_state{key=Key, iv=IV} = CS0,
 
 %%--------------------------------------------------------------------
 -spec decipher(cipher_enum(), integer(), #cipher_state{}, binary(), tls_version()) ->
-		      {binary(), #cipher_state{}}.
+		      {binary(), binary(), #cipher_state{}} | #alert{}.
 %%
 %% Description: Decrypts the data and the MAC using cipher described
 %% by cipher_enum() and updating the cipher state.
@@ -370,7 +370,7 @@ openssl_suite_name(Cipher) ->
 filter(undefined, Ciphers) -> 
     Ciphers;
 filter(DerCert, Ciphers) ->
-    {ok, OtpCert} = public_key:pkix_decode_cert(DerCert, otp),
+    OtpCert = public_key:pkix_decode_cert(DerCert, otp),
     SigAlg = OtpCert#'OTPCertificate'.signatureAlgorithm,
     case ssl_certificate:signature_type(SigAlg#'SignatureAlgorithm'.algorithm) of
 	rsa ->
@@ -506,6 +506,12 @@ generic_stream_cipher_from_bin(T, HashSz) ->
 
 is_correct_padding(_, {3, 0}) ->
     true; 
+%% For interoperability reasons we do not check the padding in TLS 1.0 as it
+%% is not strictly required and breaks interopability with for instance 
+%% Google. 
+is_correct_padding(_, {3, 1}) ->
+    true; 
+%% Padding must be check in TLS 1.1 and after  
 is_correct_padding(#generic_block_cipher{padding_length = Len, padding = Padding}, _) ->
     list_to_binary(lists:duplicate(Len, Len))  == Padding.
 
