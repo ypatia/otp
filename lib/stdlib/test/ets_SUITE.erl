@@ -94,6 +94,8 @@
 	 do_heavy_concurrent/1
 	]).
 
+-export([t_select_reverse/1]).
+
 -include("test_server.hrl").
 
 init_per_testcase(Case, Config) ->
@@ -128,7 +130,7 @@ all(suite) ->
      match_heavy, fold, member,
      t_delete_object, t_init_table, t_whitebox, 
      t_delete_all_objects, t_insert_list, t_test_ms,
-     t_select_delete, t_ets_dets, memory,
+     t_select_delete, t_ets_dets, memory, t_select_reverse,
      t_bucket_disappears,
      select_fail,t_insert_new, t_repair_continuation, otp_5340, otp_6338,
      otp_6842_select_1000, otp_7665, otp_8732,
@@ -393,7 +395,7 @@ memory(Config) when is_list(Config) ->
     ?line erts_debug:set_internal_state(available_internal_state, true),
     ?line ok = chk_normal_tab_struct_size(),
     ?line L = [T1,T2,T3,T4] = fill_sets_int(1000),
-    ?line XRes1 = adjust_xmem(L, {14862,14072,14072,14078}),
+    ?line XRes1 = adjust_xmem(L, {13862,13072,13072,13078}),
     ?line Res1 = {?S(T1),?S(T2),?S(T3),?S(T4)},
     ?line lists:foreach(fun(T) ->
  				Before = ets:info(T,size),
@@ -404,7 +406,7 @@ memory(Config) when is_list(Config) ->
 					  [Key, ets:info(T,type), Before, ets:info(T,size), Objs])
 		  end,
 		  L),
-    ?line XRes2 = adjust_xmem(L, {14851,14062,14052,14058}),
+    ?line XRes2 = adjust_xmem(L, {13852,13063,13054,13060}),
     ?line Res2 = {?S(T1),?S(T2),?S(T3),?S(T4)},
     ?line lists:foreach(fun(T) ->
  				Before = ets:info(T,size),
@@ -415,7 +417,7 @@ memory(Config) when is_list(Config) ->
 					  [Key, ets:info(T,type), Before, ets:info(T,size), Objs])
 			end,
 			L),
-    ?line XRes3 = adjust_xmem(L, {14840,14052,14032,14038}),
+    ?line XRes3 = adjust_xmem(L, {13842,13054,13036,13042}),
     ?line Res3 = {?S(T1),?S(T2),?S(T3),?S(T4)},
     ?line lists:foreach(fun(T) ->
 			  ?line ets:delete_all_objects(T)
@@ -787,6 +789,67 @@ t_test_ms(Config) when is_list(Config) ->
 						   ['$$']}]),
     ?line true = (if is_list(String) -> true; true -> false end),
     ?line verify_etsmem(EtsMem).
+
+t_select_reverse(doc) ->
+    ["Test the select reverse BIF's"];
+t_select_reverse(suite) ->
+    [];
+t_select_reverse(Config) when is_list(Config) ->
+    ?line Table = ets:new(xxx, [ordered_set]),
+    ?line filltabint(Table,1000),
+    ?line A = lists:reverse(ets:select(Table,[{{'$1', '_'},
+					 [{'>',
+					   {'rem',
+					    '$1', 5},
+					   2}],
+					 ['$_']}])),
+    ?line A = ets:select_reverse(Table,[{{'$1', '_'},
+				   [{'>',
+				     {'rem',
+				      '$1', 5},
+				     2}],
+				   ['$_']}]),
+    ?line A = reverse_chunked(Table,[{{'$1', '_'},
+				   [{'>',
+				     {'rem',
+				      '$1', 5},
+				     2}],
+				   ['$_']}],3),
+    % A set/bag/duplicate_bag should get the same result regardless
+    % of select or select_reverse
+    ?line Table2 = ets:new(xxx, [set]),
+    ?line filltabint(Table2,1000),
+    ?line Table3 = ets:new(xxx, [bag]),
+    ?line filltabint(Table3,1000),
+    ?line Table4 = ets:new(xxx, [duplicate_bag]),
+    ?line filltabint(Table4,1000),
+    ?line lists:map(fun(Tab) ->
+		      B = ets:select(Tab,[{{'$1', '_'},
+					   [{'>',
+					     {'rem',
+					      '$1', 5},
+					     2}],
+					   ['$_']}]),
+		      B = ets:select_reverse(Tab,[{{'$1', '_'},
+						   [{'>',
+						     {'rem',
+						      '$1', 5},
+						     2}],
+						   ['$_']}])
+	      end,[Table2, Table3, Table4]),
+    ok.
+
+
+
+reverse_chunked(T,MS,N) ->
+    do_reverse_chunked(ets:select_reverse(T,MS,N),[]).
+
+do_reverse_chunked('$end_of_table',Acc) ->
+    lists:reverse(Acc);
+do_reverse_chunked({L,C},Acc) ->
+    NewAcc = lists:reverse(L)++Acc,
+    do_reverse_chunked(ets:select_reverse(C), NewAcc).
+
 
 t_select_delete(doc) ->
     ["Test the ets:select_delete/2 and ets:select_count/2 BIF's"];
@@ -3942,7 +4005,7 @@ do_lookup_element(Tab, N, M) ->
     end.
 
 
-heavy_concurrent(Config) ->
+heavy_concurrent(_Config) ->
     repeat_for_opts(do_heavy_concurrent).
 
 do_heavy_concurrent(Opts) ->
@@ -3961,7 +4024,7 @@ do_heavy_concurrent(Opts) ->
     ?line lists:foreach(fun (P) ->
 				M = erlang:monitor(process, P),
 				receive
-				    {'DOWN', Mon, process, P, _} ->
+				    {'DOWN', M, process, P, _} ->
 					ok
 				end
 			end,

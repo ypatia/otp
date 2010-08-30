@@ -2517,7 +2517,7 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	pb->bytes = t;
 	pb->flags = 0;
 
-	MSO(BIF_P).overhead += target_size / sizeof(Eterm);
+	OH_OVERHEAD(&(MSO(BIF_P)), target_size / sizeof(Eterm));
 	BUMP_REDS(BIF_P,(pos - opos) / BINARY_COPY_LOOP_FACTOR);
 
 	BIF_RET(make_binary(pb));
@@ -2551,7 +2551,8 @@ BIF_RETTYPE binary_referenced_byte_size_1(BIF_ALIST_1)
     }
     pb = (ProcBin *) binary_val(bin);
     if (pb->thing_word == HEADER_PROC_BIN) {
-	res = erts_make_integer((Uint) pb->val->orig_size, BIF_P); /* XXX:PaN Halfword? orig_size is a long */
+	/* XXX:PaN - Halfword - orig_size is a long, we should handle that */
+	res = erts_make_integer((Uint) pb->val->orig_size, BIF_P);
     } else { /* heap binary */
 	res = erts_make_integer((Uint) ((ErlHeapBin *) pb)->size, BIF_P);
     }
