@@ -334,14 +334,12 @@ hello(start, #state{host = Host, port = Port, role = client,
 		    ssl_options = SslOpts, 
 		    transport_cb = Transport, socket = Socket,
 		    connection_states = ConnectionStates,
-		    own_cert = Cert,
 		    renegotiation = {Renegotiation, _}}
       = State0) ->
 
     Hello = ssl_handshake:client_hello(Host, Port, 
 				       ConnectionStates, 
-				       SslOpts, Cert,
-				       Renegotiation),
+				       SslOpts, Renegotiation),
 
     Version = Hello#client_hello.client_version,
     Hashes0 = ssl_handshake:init_hashes(),
@@ -353,7 +351,7 @@ hello(start, #state{host = Host, port = Port, role = client,
 			 session = 
                          #session{session_id = Hello#client_hello.session_id,
                                   is_resumable = false},
-                         tls_handshake_hashes = Hashes1},
+			  tls_handshake_hashes = Hashes1},
     {Record, State} = next_record(State1),
     next_state(hello, Record, State);
     
@@ -579,58 +577,61 @@ certify(#client_key_exchange{} = Msg,
     %% We expect a certificate here
     handle_unexpected_message(Msg, certify_client_key_exchange, State);
 
-certify(#client_key_exchange{exchange_keys 
-			     = #encrypted_premaster_secret{premaster_secret 
-							   = EncPMS}},
-        #state{negotiated_version = Version,
-	       connection_states = ConnectionStates0,
-	       session = Session0,
-	       private_key = Key} = State0) ->
-    try ssl_handshake:decrypt_premaster_secret(EncPMS, Key) of
-	PremasterSecret ->
-	    case ssl_handshake:master_secret(Version, PremasterSecret, 
-					     ConnectionStates0, server) of
-		{MasterSecret, ConnectionStates} ->
-		    Session = Session0#session{master_secret = MasterSecret},
-		    State1 = State0#state{connection_states = ConnectionStates,
-					 session = Session},
-		    {Record, State} = next_record(State1),
-		    next_state(cipher, Record, State);
-		#alert{} = Alert ->
-		    handle_own_alert(Alert, Version, 
-				     certify_client_key_exchange, State0),
-		    {stop, normal, State0} 
-	    end
+certify(#client_key_exchange{exchange_keys = Keys},
+	State = #state{key_algorithm = KeyAlg, negotiated_version = Version}) ->
+    try
+	certify_client_key_exchange(ssl_handshake:decode_client_key(Keys, KeyAlg, Version), State)
     catch 
 	#alert{} = Alert ->
-	    handle_own_alert(Alert, Version, certify_client_key_exchange, 
-			     State0),
+	    handle_own_alert(Alert, Version, certify_client_key_exchange, State),
+	    {stop, normal, State}
+    end;
+
+certify(Msg, State) ->
+    handle_unexpected_message(Msg, certify, State).
+
+certify_client_key_exchange(#encrypted_premaster_secret{premaster_secret= EncPMS},
+			    #state{negotiated_version = Version,
+				   connection_states = ConnectionStates0,
+				   session = Session0,
+				   private_key = Key} = State0) ->
+    PremasterSecret = ssl_handshake:decrypt_premaster_secret(EncPMS, Key),
+    case ssl_handshake:master_secret(Version, PremasterSecret,
+				     ConnectionStates0, server) of
+	{MasterSecret, ConnectionStates} ->
+	    Session = Session0#session{master_secret = MasterSecret},
+	    State1 = State0#state{connection_states = ConnectionStates,
+				  session = Session},
+	    {Record, State} = next_record(State1),
+	    next_state(cipher, Record, State);
+	#alert{} = Alert ->
+	    handle_own_alert(Alert, Version,
+			     certify_client_key_exchange, State0),
 	    {stop, normal, State0} 
     end;
 
-certify(#client_key_exchange{exchange_keys = #client_diffie_hellman_public{
-			       dh_public = ClientPublicDhKey}},
-        #state{negotiated_version = Version,
-	       diffie_hellman_params = #'DHParameter'{prime = P,
-						      base = G},
-	       diffie_hellman_keys = {_, ServerDhPrivateKey},
-	       role = Role,
-	       session = Session,
-	       connection_states = ConnectionStates0} = State0) ->
-    
+certify_client_key_exchange(#client_diffie_hellman_public{dh_public = ClientPublicDhKey},
+			    #state{negotiated_version = Version,
+				   diffie_hellman_params = #'DHParameter'{prime = P,
+									  base = G},
+				   diffie_hellman_keys = {_, ServerDhPrivateKey},
+				   role = Role,
+				   session = Session,
+				   connection_states = ConnectionStates0} = State0) ->
+
     PMpint = crypto:mpint(P),
     GMpint = crypto:mpint(G),	
     PremasterSecret = crypto:dh_compute_key(mpint_binary(ClientPublicDhKey),
 					    ServerDhPrivateKey,
 					    [PMpint, GMpint]),
-    
+
     case ssl_handshake:master_secret(Version, PremasterSecret,
 				     ConnectionStates0, Role) of
 	{MasterSecret, ConnectionStates} ->
 	    State1 = State0#state{session = 
-				 Session#session{master_secret 
-						 = MasterSecret},
-				connection_states = ConnectionStates},
+				      Session#session{master_secret
+						      = MasterSecret},
+				  connection_states = ConnectionStates},
 
 	    {Record, State} = next_record(State1),
 	    next_state(cipher, Record, State);
@@ -638,10 +639,7 @@ certify(#client_key_exchange{exchange_keys = #client_diffie_hellman_public{
 	    handle_own_alert(Alert, Version, 
 			     certify_client_key_exchange, State0),
 	    {stop, normal, State0} 
-    end;
-
-certify(Msg, State) ->
-    handle_unexpected_message(Msg, certify, State).
+    end.
 
 %%--------------------------------------------------------------------
 -spec cipher(#hello_request{} | #certificate_verify{} | #finished{} | term(),
@@ -701,14 +699,13 @@ connection(#hello_request{}, #state{host = Host, port = Port,
 				    socket = Socket,
 				    ssl_options = SslOpts,
 				    negotiated_version = Version,
-				    own_cert = Cert,
 				    transport_cb = Transport,
 				    connection_states = ConnectionStates0,
 				    renegotiation = {Renegotiation, _},
 				    tls_handshake_hashes = Hashes0} = State0) ->
    
-    Hello = ssl_handshake:client_hello(Host, Port, 
-				       ConnectionStates0, SslOpts, Cert, Renegotiation),
+    Hello = ssl_handshake:client_hello(Host, Port, ConnectionStates0,
+				       SslOpts, Renegotiation),
   
     {BinMsg, ConnectionStates1, Hashes1} =
         encode_handshake(Hello, Version, ConnectionStates0, Hashes0),
@@ -1638,8 +1635,6 @@ application_data(Data, #state{user_application = {_Mon, Pid},
 		  true -> <<Buffer0/binary, Data/binary>>
 	      end,
     case get_data(SOpts, BytesToRead, Buffer1) of
-	{ok, <<>>, Buffer} -> % no reply, we need more data
-	    next_record(State0#state{user_data_buffer = Buffer});
 	{ok, ClientData, Buffer} -> % Send data
 	    SocketOpt = deliver_app_data(SOpts, ClientData, Pid, From),
 	    State = State0#state{user_data_buffer = Buffer,
@@ -1655,12 +1650,16 @@ application_data(Data, #state{user_application = {_Mon, Pid},
 	 	true -> %% We have more data
  		    application_data(<<>>, State)
 	    end;
+	{more, Buffer} -> % no reply, we need more data
+	    next_record(State0#state{user_data_buffer = Buffer});
 	{error,_Reason} -> %% Invalid packet in packet mode
 	    deliver_packet_error(SOpts, Buffer1, Pid, From),
 	    {stop, normal, State0}
     end.
 
 %% Picks ClientData 
+get_data(_, _, <<>>) ->
+    {more, <<>>};
 get_data(#socket_options{active=Active, packet=Raw}, BytesToRead, Buffer) 
   when Raw =:= raw; Raw =:= 0 ->   %% Raw Mode
     if 
@@ -1673,13 +1672,13 @@ get_data(#socket_options{active=Active, packet=Raw}, BytesToRead, Buffer)
 	    {ok, Data, Rest};
 	true ->
 	    %% Passive Mode not enough data
-	    {ok, <<>>, Buffer}
+	    {more, Buffer}
     end;
 get_data(#socket_options{packet=Type, packet_size=Size}, _, Buffer) ->
     PacketOpts = [{packet_size, Size}], 
     case decode_packet(Type, Buffer, PacketOpts) of
 	{more, _} ->
-	    {ok, <<>>, Buffer};
+	    {more, Buffer};
 	Decoded ->
 	    Decoded
     end.
@@ -1794,9 +1793,7 @@ next_state(Next, #ssl_tls{type = ?ALERT, fragment = EncAlerts}, State) ->
     handle_alerts(Alerts,  {next_state, Next, State});
 
 next_state(StateName, #ssl_tls{type = ?HANDSHAKE, fragment = Data},
-  	   State0 = #state{key_algorithm = KeyAlg,
-  			   tls_handshake_buffer = Buf0,
-  			   negotiated_version = Version}) ->
+	   State0 = #state{tls_handshake_buffer = Buf0, negotiated_version = Version}) ->
     Handle = 
    	fun({#hello_request{} = Packet, _}, {next_state, connection = SName, State}) ->
    		%% This message should not be included in handshake
@@ -1819,7 +1816,7 @@ next_state(StateName, #ssl_tls{type = ?HANDSHAKE, fragment = Data},
    	   (_, StopState) -> StopState
    	end,
     try
-   	{Packets, Buf} = ssl_handshake:get_tls_handshake(Data,Buf0, KeyAlg,Version),
+	{Packets, Buf} = ssl_handshake:get_tls_handshake(Data,Buf0),
 	State = State0#state{tls_packets = Packets, tls_handshake_buffer = Buf},
 	handle_tls_handshake(Handle, StateName, State)
     catch throw:#alert{} = Alert ->
@@ -1831,7 +1828,7 @@ next_state(StateName, #ssl_tls{type = ?APPLICATION_DATA, fragment = Data}, State
     case application_data(Data, State0) of
 	Stop = {stop,_,_} ->
    	    Stop;
-	 {Record, State} ->
+	{Record, State} ->
    	    next_state(StateName, Record, State)
     end;
 next_state(StateName, #ssl_tls{type = ?CHANGE_CIPHER_SPEC, fragment = <<1>>} = 

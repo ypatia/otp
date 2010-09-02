@@ -7,7 +7,7 @@
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% retrieved online at http://www.erlang.org/.2
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -234,7 +234,8 @@ all(suite) ->
      server_no_wrap_sequence_number, extended_key_usage,
      validate_extensions_fun, no_authority_key_identifier,
      invalid_signature_client, invalid_signature_server, cert_expired,
-     client_with_cert_cipher_suites_handshake
+     client_with_cert_cipher_suites_handshake, unknown_server_ca_fail,
+     unknown_server_ca_accept
     ].
 
 %% Test cases starts here.
@@ -1553,25 +1554,26 @@ cipher(CipherSuite, Version, Config, ClientOpts, ServerOpts) ->
     process_flag(trap_exit, true),
     test_server:format("Testing CipherSuite ~p~n", [CipherSuite]),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    
+    ErlangCipherSuite = erlang_cipher_suite(CipherSuite),
+
+    ConnectionInfo = {ok, {Version, ErlangCipherSuite}},
+
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0}, 
 					{from, self()}, 
-			   {mfa, {?MODULE, connection_info_result, []}},
+			   {mfa, {ssl_test_lib, cipher_result, [ConnectionInfo]}},
 			   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
 			   {from, self()}, 
-			   {mfa, {?MODULE, connection_info_result, []}},
+			   {mfa, {ssl_test_lib, cipher_result, [ConnectionInfo]}},
 			   {options, 
 			    [{ciphers,[CipherSuite]} | 
 			     ClientOpts]}]), 
-   
-    ErlangCipherSuite = erlang_cipher_suite(CipherSuite),
-
-    ServerMsg = ClientMsg = {ok, {Version, ErlangCipherSuite}},
-			   
-    Result = ssl_test_lib:wait_for_result(Server, ServerMsg, 
-					  Client, ClientMsg),    
+  			   
+    Result = ssl_test_lib:wait_for_result(Server, ok, Client, ok),   
+ 
     ssl_test_lib:close(Server),
     receive 
 	{'EXIT', Server, normal} ->
@@ -2612,12 +2614,13 @@ validate_extensions_fun(Config) when is_list(Config) ->
 
 %%--------------------------------------------------------------------
 no_authority_key_identifier(doc) -> 
-    ["Test cert that does not have authorityKeyIdentifier extension"];
+    ["Test cert that does not have authorityKeyIdentifier extension"
+     " but are present in trusted certs db."];
 
 no_authority_key_identifier(suite) -> 
     [];
 no_authority_key_identifier(Config) when is_list(Config) -> 
-    ClientOpts = ?config(client_opts, Config),
+    ClientOpts = ?config(client_verification_opts, Config),
     ServerOpts = ?config(server_opts, Config),
     PrivDir = ?config(priv_dir, Config),
    
@@ -2675,7 +2678,7 @@ invalid_signature_server(suite) ->
     [];
 
 invalid_signature_server(Config) when is_list(Config) -> 
-    ClientOpts = ?config(client_opts, Config),
+    ClientOpts = ?config(client_verification_opts, Config),
     ServerOpts = ?config(server_verification_opts, Config),
     PrivDir = ?config(priv_dir, Config),
    
@@ -2792,7 +2795,7 @@ cert_expired(suite) ->
     [];
 
 cert_expired(Config) when is_list(Config) -> 
-    ClientOpts = ?config(client_opts, Config),
+    ClientOpts = ?config(client_verification_opts, Config),
     ServerOpts = ?config(server_verification_opts, Config),
     PrivDir = ?config(priv_dir, Config),
    
@@ -2881,6 +2884,59 @@ client_with_cert_cipher_suites_handshake(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Server, ok, Client, ok),
     ssl_test_lib:close(Server),
     ssl_test_lib:close(Client).
+%%--------------------------------------------------------------------
+unknown_server_ca_fail(doc) ->
+    ["Test that the client fails if the ca is unknown in verify_peer mode"];
+unknown_server_ca_fail(suite) ->
+    [];
+unknown_server_ca_fail(Config) when is_list(Config) ->
+    ClientOpts =  ?config(client_opts, Config),
+    ServerOpts =  ?config(server_opts, Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    Server = ssl_test_lib:start_server_error([{node, ServerNode}, {port, 0},
+					      {from, self()},
+					      {mfa, {ssl_test_lib,
+						     no_result, []}},
+					      {options, ServerOpts}]),
+    Port  = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client_error([{node, ClientNode}, {port, Port},
+					      {host, Hostname},
+					      {from, self()},
+					      {mfa, {ssl_test_lib,
+						     no_result, []}},
+					      {options,
+					       [{verify, verify_peer}| ClientOpts]}]),
+
+    ssl_test_lib:check_result(Server, {error,"unknown ca"}, Client, {error, "unknown ca"}),
+    ssl_test_lib:close(Server),
+    ssl_test_lib:close(Client).
+
+%%--------------------------------------------------------------------
+unknown_server_ca_accept(doc) ->
+    ["Test that the client succeds if the ca is unknown in verify_none mode"];
+unknown_server_ca_accept(suite) ->
+    [];
+unknown_server_ca_accept(Config) when is_list(Config) ->
+    ClientOpts =  ?config(client_opts, Config),
+    ServerOpts =  ?config(server_opts, Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+					{from, self()},
+					{mfa, {?MODULE,
+					       send_recv_result_active, []}},
+					{options, ServerOpts}]),
+    Port  = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
+					{host, Hostname},
+					{from, self()},
+					{mfa, {?MODULE,
+					       send_recv_result_active, []}},
+					{options,
+					 [{verify, verify_none}| ClientOpts]}]),
+
+    ssl_test_lib:check_result(Server, ok, Client, ok),
+    ssl_test_lib:close(Server),
+    ssl_test_lib:close(Client).
 
 %%--------------------------------------------------------------------
 %%% Internal functions
@@ -2906,6 +2962,7 @@ send_recv_result_active_once(Socket) ->
 
 result_ok(_Socket) ->
     ok.
+
 
 renegotiate(Socket, Data) ->
     test_server:format("Renegotiating ~n", []),

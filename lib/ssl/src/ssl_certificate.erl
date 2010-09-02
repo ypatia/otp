@@ -31,7 +31,7 @@
 -include("ssl_debug.hrl").
 -include_lib("public_key/include/public_key.hrl"). 
 
--export([trusted_cert_and_path/3, 
+-export([trusted_cert_and_path/2,
 	 certificate_chain/2, 
 	 file_to_certificats/1,
 	 validate_extensions/6,
@@ -47,48 +47,46 @@
 %%====================================================================
 
 %%--------------------------------------------------------------------
--spec trusted_cert_and_path([der_cert()], certdb_ref(), boolean()) -> 
-				   {der_cert(), [der_cert()], list()}.
+-spec trusted_cert_and_path([der_cert()], certdb_ref()) ->
+				   {der_cert() | unknown_ca, [der_cert()]}.
 %%
 %% Description: Extracts the root cert (if not presents tries to 
 %% look it up, if not found {bad_cert, unknown_ca} will be added verification
 %% errors. Returns {RootCert, Path, VerifyErrors}
 %%--------------------------------------------------------------------
-trusted_cert_and_path(CertChain, CertDbRef, Verify) ->
-    [Cert | RestPath] = lists:reverse(CertChain),
+trusted_cert_and_path(CertChain, CertDbRef) ->
+    Path = [Cert | _] = lists:reverse(CertChain),
     OtpCert = public_key:pkix_decode_cert(Cert, otp),
-    IssuerAnPath = 
+    IssuerID =
 	case public_key:pkix_is_self_signed(OtpCert) of
 	    true ->
 		{ok, IssuerId} = public_key:pkix_issuer_id(OtpCert, self),
-		{IssuerId, RestPath};
-	    false  ->
+		IssuerId;
+	    false ->
 		case public_key:pkix_issuer_id(OtpCert, other) of
 		    {ok, IssuerId} ->
-			{IssuerId, [Cert | RestPath]};
+			IssuerId;
 		    {error, issuer_not_found} ->
 			case find_issuer(OtpCert, no_candidate) of
 			    {ok, IssuerId} ->
-				{IssuerId, [Cert | RestPath]};
+				IssuerId;
 			    Other ->
-				{Other, RestPath}
+				Other
 			end
 		end
 	end,
     
-    case IssuerAnPath of
-	{{error, issuer_not_found}, _ } ->
-	    %% The root CA was not sent and can not be found, we fail if verify = true
-	    not_valid(?ALERT_REC(?FATAL, ?UNKNOWN_CA), Verify, {Cert, RestPath});
-	{{SerialNr, Issuer}, Path} ->
-	    case ssl_manager:lookup_trusted_cert(CertDbRef, 
-							SerialNr, Issuer) of
+    case IssuerID of
+	{error, issuer_not_found} ->
+	    %% The root CA was not sent and can not be found.
+	    {unknown_ca, Path};
+	{SerialNr, Issuer} ->
+	    case ssl_manager:lookup_trusted_cert(CertDbRef, SerialNr, Issuer) of
 		{ok, {BinCert,_}} ->
-		    {BinCert, Path, []};
+		    {BinCert, Path};
 		_ ->
-		    %%  Fail if verify = true
-		    not_valid(?ALERT_REC(?FATAL, ?UNKNOWN_CA),
-			     Verify,  {Cert, RestPath})
+		    %% Root CA could not be verified
+		    {unknown_ca, Path}
 	    end
     end.
 
@@ -243,11 +241,6 @@ find_issuer(OtpCert, PrevCandidateKey) ->
 		    find_issuer(OtpCert, Key)
 	    end
     end.
-
-not_valid(Alert, true, _) ->
-    throw(Alert);
-not_valid(_, false, {ErlCert, Path}) ->
-    {ErlCert, Path, [{bad_cert, unknown_ca}]}.
 
 is_valid_extkey_usage(KeyUse, client) ->
     %% Client wants to verify server
