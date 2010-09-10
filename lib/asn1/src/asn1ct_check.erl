@@ -22,6 +22,8 @@
 %% Main Module for ASN.1 compile time functions
 
 %-compile(export_all).
+%% Avoid warning for local function error/1 clashing with autoimported BIF.
+-compile({no_auto_import,[error/1]}).
 -export([check/2,storeindb/2]).
 %-define(debug,1).
 -include("asn1_records.hrl").
@@ -6408,6 +6410,12 @@ any_component_relation(S,Type,CNames,NamePath,Acc) when is_record(Type,type) ->
 		[]
 	end,
     InnerAcc  ++ CRelPath ++ Acc;
+%% Just skip the markers for ExtensionAdditionGroup start and end
+%% in this function
+any_component_relation(S,[#'ExtensionAdditionGroup'{}|Cs],CNames,NamePath,Acc) ->
+    any_component_relation(S,Cs,CNames,NamePath,Acc);
+any_component_relation(S,['ExtensionAdditionGroupEnd'|Cs],CNames,NamePath,Acc) ->
+    any_component_relation(S,Cs,CNames,NamePath,Acc);
 any_component_relation(_,[],_,_,Acc) ->
     Acc.
 
