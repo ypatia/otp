@@ -3761,7 +3761,8 @@ build_field_dict([], _TypeNames, _InOpaque, _RecDict, _VarDict, Acc) ->
 
 get_mod_record([{FieldName, DeclType}|Left1], 
 	       [{FieldName, ModType}|Left2], Acc) ->
-  case t_is_var(ModType) orelse t_is_subtype(ModType, DeclType) of
+  case t_is_var(ModType) orelse t_is_remote(ModType) orelse
+    t_is_subtype(ModType, DeclType) of
     false -> {error, FieldName};
     true -> get_mod_record(Left1, Left2, [{FieldName, ModType}|Acc])
   end;
