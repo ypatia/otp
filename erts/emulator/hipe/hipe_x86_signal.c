@@ -16,7 +16,7 @@
  * 
  * %CopyrightEnd%
  */
-/* $Id$
+/*
  * hipe_x86_signal.c
  *
  * Erlang code compiled to x86 native code uses the x86 %esp as its
