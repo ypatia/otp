@@ -3,10 +3,16 @@
 		(in reversed chronological order)
 ==============================================================================
 
-Version 2.3.1 (in Erlang/OTP R14B)
-----------------------------------
+Version 2.x.x (in Erlang/OTP R14B01)
+------------------------------------
+ - Fixed problems in the handling of remote types in records used as types
+   (thanks to Nico Kruber for the report and to Maria Christakis for the fix).
  - Fixed handling of nested opaque types (thanks to Thorsten Schuett for
    reporting it and to Maria Christakis for fixing it).
+
+Version 2.3.1 (in Erlang/OTP R14B)
+----------------------------------
+ - Eliminated warnings for auto-imported BIF clashes.
 
 Version 2.3.0 (in Erlang/OTP R14A)
 ----------------------------------
