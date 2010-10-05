@@ -215,7 +215,8 @@ comment_delta(Text) ->
 %% the source file itself, but have been included by preprocessing. This
 %% way, comments will not be inserted into such parts by mistake.
 
--record(filter, {file = undefined, line = 0 :: integer()}).
+-record(filter, {file = undefined :: file:filename() | 'undefined',
+		 line = 0         :: integer()}).
 
 filter_forms(Fs) ->
     filter_forms(Fs, false, #filter{}).
