@@ -33,7 +33,9 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
 -export([handle_cast/2]).
 
--export_type([child_spec/0, strategy/0]).
+%%--------------------------------------------------------------------------
+
+-export_type([child_spec/0, del_err/0, startchild_ret/0, strategy/0]).
 
 %%--------------------------------------------------------------------------
 
@@ -79,16 +81,10 @@
 
 %%--------------------------------------------------------------------------
 
--spec behaviour_info(atom()) -> 'undefined' | [{atom(), arity(), string()}].
+-spec behaviour_info(atom()) -> 'undefined' | [{atom(), arity()}].
 
 behaviour_info(callbacks) ->
-    [{init,1,
-      "-spec init(Args) ->
-         {'ok', {{RestartStrategy :: supervisor:strategy(),
-                  MaxR            :: non_neg_integer(),
-                  MaxT            :: non_neg_integer()}, 
-                 [ChildSpec :: supervisor:child_spec()]}}
-         | 'ignore'."}];
+    [{init,1}];
 behaviour_info(_Other) ->
     undefined.
 
