@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2009. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -50,7 +50,7 @@
 	 otp_4208/1, otp_4989/1, many_clients/1, otp_4906/1, otp_5402/1,
          simultaneous_open/1, insert_new/1, repair_continuation/1,
          otp_5487/1, otp_6206/1, otp_6359/1, otp_4738/1, otp_7146/1,
-         otp_8070/1]).
+         otp_8070/1, otp_8856/1, otp_8898/1, otp_8899/1, otp_8903/1]).
 
 -export([dets_dirty_loop/0]).
 
@@ -108,7 +108,7 @@ all(suite) ->
 	      cache_duplicate_bags_v9, otp_4208, otp_4989, many_clients,
               otp_4906, otp_5402, simultaneous_open, insert_new, 
               repair_continuation, otp_5487, otp_6206, otp_6359, otp_4738,
-              otp_7146, otp_8070]} 
+              otp_7146, otp_8070, otp_8856, otp_8898, otp_8899, otp_8903]}
     end.
 
 not_run(suite) -> [];
@@ -2935,6 +2935,57 @@ ets_init(Tab, N) ->
     ets:insert(Tab, {N,N}),
     ets_init(Tab, N - 1).
 
+otp_8898(doc) ->
+    ["OTP-8898. Truncated Dets file."];
+otp_8898(suite) ->
+    [];
+otp_8898(Config) when is_list(Config) ->
+    Tab = otp_8898,
+    ?line FName = filename(Tab, Config),
+
+    Server = self(),
+
+    ?line file:delete(FName),
+    ?line {ok, _} = dets:open_file(Tab,[{file, FName}]),
+    ?line [P1,P2,P3] = new_clients(3, Tab),
+
+    Seq = [{P1,[sync]},{P2,[{lookup,1,[]}]},{P3,[{insert,{1,b}}]}],
+    ?line atomic_requests(Server, Tab, [[]], Seq),
+    ?line true = get_replies([{P1,ok},{P2,ok},{P3,ok}]),
+    ?line ok = dets:close(Tab),
+    ?line {ok, _} = dets:open_file(Tab,[{file, FName}]),
+    ?line file:delete(FName),
+
+    ok.
+
+otp_8899(doc) ->
+    ["OTP-8899. Several clients. Updated Head was ignored."];
+otp_8899(suite) ->
+    [];
+otp_8899(Config) when is_list(Config) ->
+    Tab = many_clients,
+    ?line FName = filename(Tab, Config),
+
+    Server = self(),
+
+    ?line file:delete(FName),
+    ?line {ok, _} = dets:open_file(Tab,[{file, FName},{version,9}]),
+    ?line [P1,P2,P3,P4] = new_clients(4, Tab),
+
+    MC = [Tab],
+    Seq6a = [{P1,[{insert,[{used_to_be_skipped_by,match}]},
+                  {lookup,1,[{1,a}]}]},
+             {P2,[{verbose,true,MC}]},
+             {P3,[{lookup,1,[{1,a}]}]}, {P4,[{verbose,true,MC}]}],
+    ?line atomic_requests(Server, Tab, [[{1,a},{2,b},{3,c}]], Seq6a),
+    ?line true = get_replies([{P1,ok}, {P2,ok}, {P3,ok}, {P4,ok}]),
+    ?line [{1,a},{2,b},{3,c},{used_to_be_skipped_by,match}] =
+        lists:sort(dets:match_object(Tab, '_')),
+    ?line _ = dets:close(Tab),
+    ?line file:delete(FName),
+
+    ok.
+
 many_clients(doc) ->
     ["Several clients accessing a table simultaneously."];
 many_clients(suite) ->
@@ -3071,6 +3122,11 @@ client(S, Tab) ->
 
 eval([], _Tab) ->
     ok;
+eval([{verbose,Bool,Expected} | L], Tab) ->
+    ?line case dets:verbose(Bool) of
+	      Expected -> eval(L, Tab);
+	      Error -> {error, {verbose,Error}}
+	  end;
 eval([sync | L], Tab) ->
     ?line case dets:sync(Tab) of
 	      ok -> eval(L, Tab);
@@ -3698,6 +3754,54 @@ otp_8070(Config) when is_list(Config) ->
     ?line false = dets:insert_new(Tab, [{3,1},{3,1}]),
     ?line [{3,0}] = dets:lookup(Tab, 3),
     ?line ok = dets:close(Tab),
+    file:delete(File),
+    ok.
+
+otp_8856(doc) ->
+    ["OTP-8856. insert_new() bug."];
+otp_8856(suite) ->
+    [];
+otp_8856(Config) when is_list(Config) ->
+    Tab = otp_8856,
+    File = filename(Tab, Config),
+    file:delete(File),
+    Me = self(),
+    ?line {ok, _} = dets:open_file(Tab, [{type, bag}, {file, File}]),
+    spawn(fun()-> Me ! {1, dets:insert(Tab, [])} end),
+    spawn(fun()-> Me ! {2, dets:insert_new(Tab, [])} end),
+    ?line ok = dets:close(Tab),
+    ?line receive {1, ok} -> ok end,
+    ?line receive {2, true} -> ok end,
+    file:delete(File),
+
+    ?line {ok, _} = dets:open_file(Tab, [{type, set}, {file, File}]),
+    spawn(fun() -> dets:delete(Tab, 0) end),
+    spawn(fun() -> Me ! {3, dets:insert_new(Tab, {0,0})} end),
+    ?line ok = dets:close(Tab),
+    ?line receive {3, true} -> ok end,
+    file:delete(File),
+    ok.
+
+otp_8903(doc) ->
+    ["OTP-8903. bchunk/match/select bug."];
+otp_8903(suite) ->
+    [];
+otp_8903(Config) when is_list(Config) ->
+    Tab = otp_8903,
+    File = filename(Tab, Config),
+    ?line {ok,T} = dets:open_file(bug, [{file,File}]),
+    ?line ok = dets:insert(T, [{1,a},{2,b},{3,c}]),
+    ?line dets:safe_fixtable(T, true),
+    ?line {[_],C1} = dets:match_object(T, '_', 1),
+    ?line {BC1,_D} = dets:bchunk(T, start),
+    ?line ok = dets:close(T),
+    ?line {'EXIT', {badarg, _}} = (catch {foo,dets:match_object(C1)}),
+    ?line {'EXIT', {badarg, _}} = (catch {foo,dets:bchunk(T, BC1)}),
+    ?line {ok,T} = dets:open_file(bug, [{file,File}]),
+    ?line false = dets:info(T, safe_fixed),
+    ?line {'EXIT', {badarg, _}} = (catch {foo,dets:match_object(C1)}),
+    ?line {'EXIT', {badarg, _}} = (catch {foo,dets:bchunk(T, BC1)}),
+    ?line ok = dets:close(T),
     file:delete(File),
     ok.
 
