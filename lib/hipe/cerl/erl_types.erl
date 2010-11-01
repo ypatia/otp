@@ -2409,14 +2409,14 @@ inf_tuples_in_sets(L1, [?tuple(Elements2, _, ?any)], Mode) ->
 inf_tuples_in_sets(L1, L2, Mode) ->
   inf_tuples_in_sets(L1, L2, [], Mode).
 
-inf_tuples_in_sets([?tuple(Elements1, Arity, Tag)|Ts1], 
+inf_tuples_in_sets([?tuple(Elements1, Arity, Tag)|Ts1],
 		   [?tuple(Elements2, Arity, Tag)|Ts2], Acc, Mode) ->
   case t_inf_lists_strict(Elements1, Elements2, Mode) of
     bottom -> inf_tuples_in_sets(Ts1, Ts2, Acc, Mode);
     NewElements ->
       inf_tuples_in_sets(Ts1, Ts2, [?tuple(NewElements, Arity, Tag)|Acc], Mode)
   end;
-inf_tuples_in_sets([?tuple(_, _, Tag1)|Ts1] = L1, 
+inf_tuples_in_sets([?tuple(_, _, Tag1)|Ts1] = L1,
 		   [?tuple(_, _, Tag2)|Ts2] = L2, Acc, Mode) ->
   if Tag1 < Tag2 -> inf_tuples_in_sets(Ts1, L2, Acc, Mode);
      Tag1 > Tag2 -> inf_tuples_in_sets(L1, Ts2, Acc, Mode)
