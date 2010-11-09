@@ -843,7 +843,7 @@ compare_with_integer(N, OldVarRange) ->
 
 %%== Ranges ==================================================================
 
--spec pp_ann(#ann{} | erl_types:erl_type()) -> [string()].
+-spec pp_ann(#ann{} | erl_types:erl_type()) -> string().
 
 pp_ann(#ann{range=#range{range=R, other=false}}) ->
   pp_range(R);

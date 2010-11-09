@@ -102,7 +102,7 @@ compile_icode(MFA, LinearIcode0, Options, Servers, DebugState) ->
   ?opt_start_timer("Icode"),
   LinearIcode1 = icode_no_comment(LinearIcode0, Options),
   IcodeCfg0 = icode_linear_to_cfg(LinearIcode1, Options),
-  %%hipe_icode_cfg:pp(IcodeCfg1),
+  %% hipe_icode_cfg:pp(IcodeCfg0),
   IcodeCfg1 = icode_handle_exceptions(IcodeCfg0, MFA, Options),
   IcodeCfg3 = icode_inline_bifs(IcodeCfg1, Options),
   pp(IcodeCfg3, MFA, icode, pp_icode, Options, Servers),

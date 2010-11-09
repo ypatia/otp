@@ -505,7 +505,7 @@ compile(Name, File, Opts0) ->
       run_compiler(Name, DisasmFun, IcodeFun, NewOpts)
   end.
 
--spec compile_core(mod(), _, compile_file(), comp_options()) ->
+-spec compile_core(mod(), cerl:c_module(), compile_file(), comp_options()) ->
 	 {'ok', compile_ret()} | {'error', term()}.
 
 compile_core(Name, Core0, File, Opts) ->
@@ -534,7 +534,7 @@ compile_core(Name, Core0, File, Opts) ->
 %%
 %% @see compile/3
 
--spec compile(mod(), _, compile_file(), comp_options()) ->
+-spec compile(mod(), cerl:c_module() | [], compile_file(), comp_options()) ->
 	 {'ok', compile_ret()} | {'error', term()}.
 
 compile(Name, [], File, Opts) ->
@@ -789,7 +789,7 @@ finalize_fun(MfaIcodeList, Exports, Opts) ->
     FalseVal when (FalseVal =:= undefined) orelse (FalseVal =:= false) ->
       [finalize_fun_sequential(MFAIcode, Opts, #comp_servers{})
        || {_MFA, _Icode} = MFAIcode <- MfaIcodeList];
-    TrueVal when (TrueVal =:= true) or (TrueVal =:= debug) ->
+    TrueVal when (TrueVal =:= true) orelse (TrueVal =:= debug) ->
       finalize_fun_concurrent(MfaIcodeList, Exports, Opts)
   end.
 
@@ -1049,7 +1049,7 @@ post(Res, Icode, Options) ->
 %% --------------------------------------------------------------------
 
 %% @doc Returns the current HiPE version as a string().
--spec version() -> string().
+-spec version() -> nonempty_string().
 
 version() ->
   ?VERSION_STRING().
