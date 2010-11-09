@@ -469,8 +469,12 @@ expand_files([File|Left], Ext, FileAcc) ->
   case filelib:is_dir(File) of
     true ->
       {ok, List} = file:list_dir(File),
-      NewFiles =
-        [filename:join(File, X) || X <- List, filename:extension(X) =:= Ext],
+      NewFiles = lists:foldl(fun (X, Acc) ->
+				 case filename:extension(X) =:= Ext of
+				   true -> [filename:join(File, X)|Acc];
+				   false -> Acc
+				 end
+			     end, FileAcc, List),
       expand_files(Left, Ext, NewFiles);
     false ->
       expand_files(Left, Ext, [File|FileAcc])
