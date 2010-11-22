@@ -82,7 +82,7 @@
 -type location()  :: integer() | {'bof', integer()} | {'cur', integer()}
 		   | {'eof', integer()} | 'bof' | 'cur' | 'eof'.
 -type mode()      :: 'read' | 'write' | 'append'
-                   | 'exclusive' | 'raw' | 'binary' 
+                   | 'exclusive' | 'raw' | 'binary'
 		   | {'delayed_write', non_neg_integer(), non_neg_integer()}
 		   | 'delayed_write' | {'read_ahead', pos_integer()}
 		   | 'read_ahead' | 'compressed'

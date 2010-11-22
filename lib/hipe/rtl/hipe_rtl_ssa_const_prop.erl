@@ -439,7 +439,7 @@ visit_alub(Inst, Env) ->
                  hipe_rtl:alub_false_label(Inst)];
       top    -> [];
       _      ->
-        %% if the partial branch cannot be evaluated we must execute the 
+        %% if the partial branch cannot be evaluated we must execute the
         %% instruction at runtime.
         case partial_eval_branch(hipe_rtl:alub_cond(Inst), N, Z, C, V) of
           bottom -> [hipe_rtl:alub_true_label(Inst), 
@@ -971,10 +971,10 @@ update_alub(Inst, Env) ->
       [hipe_rtl:subst_uses(S2, Inst)];
     _ -> %% we know where we will be going, let's find out what Dst should be.
          %% knowing where we are going means that at most one of the values is
-         %% bottom, hence we can replace the alu-instr with a move. 
-         %% remember, a = b + 0 can give us enough info to know what jump to 
-         %% do without knowing the value of a. (I wonder if this will ever 
-         %% actualy happen ;) 
+         %% bottom, hence we can replace the alu-instr with a move.
+         %% remember, a = b + 0 can give us enough info to know what jump to
+         %% do without knowing the value of a. (I wonder if this will ever
+         %% actualy happen ;)
       Res = case ResVal of 
               bottom ->  % something nonconstant.
                 if (Val1 =:= bottom) -> Src1;
@@ -984,7 +984,7 @@ update_alub(Inst, Env) ->
             end,
       case CondRes of 
         top ->
-	  io:format("oops. something VERY bad: ~w ~w V1 & 2 ~w ~w\n", 
+	  io:format("oops. something VERY bad: ~w ~w V1 & 2 ~w ~w\n",
 		    [Inst, {ResVal, N, Z, C, V} , Val1, Val2]),
 	  [Inst];
         true  -> alub_to_move(Inst, Res, hipe_rtl:alub_true_label(Inst));

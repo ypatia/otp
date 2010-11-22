@@ -2128,7 +2128,7 @@ t_elements(?list(_, _, _) = T) -> [T];
 t_elements(?number(_, _) = T) ->
   case T of
     ?number(?any, ?unknown_qual) ->
-      [?float, ?integer(?any)]; 
+      [?float, ?integer(?any)];
     ?float -> [T];
     ?integer(?any) -> [T];
     ?int_range(_, _) -> [T];

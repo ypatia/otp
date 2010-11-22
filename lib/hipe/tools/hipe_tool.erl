@@ -396,7 +396,7 @@ fun_names(M, Funs, NativeCode, Prof) ->
 	false -> ""
       end)
    ++
-     if Prof -> 
+     if Prof ->
 	 (catch integer_to_list(hipe_bifs:call_count_get({M,F,A})));
 	true -> ""
      end
